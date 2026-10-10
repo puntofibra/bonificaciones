@@ -548,7 +548,7 @@ function authView(mode, email = '') {
     register: `<h1>Crea tu cuenta</h1><p class="sub mut">Para pedir la devolución de tus recibos 🐷</p>
       <label>NOMBRE Y APELLIDOS</label><input id="rn" autocomplete="name" maxlength="80" placeholder="Ana Martínez López">
       <label>CORREO</label><input id="em" type="email" autocomplete="email" value="${esc(email)}" placeholder="tu@correo.com">
-      <label>TELÉFONO (AQUÍ RECIBIRÁS TUS BIZUM)</label><input id="tl" type="tel" autocomplete="tel" inputmode="tel" placeholder="600 000 000">
+      <label>TELÉFONO</label><input id="tl" type="tel" autocomplete="tel" inputmode="tel" placeholder="600 000 000">
       <label>IBAN DE TU CUENTA (DONDE TE COBRAN LOS RECIBOS)</label>${ibanField('ri')}
       <input id="rw" name="web" tabindex="-1" autocomplete="off" style="position:absolute;left:-9999px;opacity:0;height:0;width:0" aria-hidden="true">
       <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;font-size:13px;letter-spacing:0;margin-top:14px"><input type="checkbox" id="ra" style="width:auto;margin:2px 0 0;accent-color:#ec4899;transform:scale(1.2)"> Acepto que FuturMovil guarde mis datos y mi cuenta bancaria para gestionar y pagar mis bonificaciones.</label>
@@ -638,7 +638,7 @@ const EST = {
   rechazada:  {ico:'❌', txt:'Rechazada', cls:'st-no'},
   cancelada:  {ico:'⊘', txt:'Cancelada', cls:'st-ca'},
 };
-const MET = {bizum:'📱 Bizum', transferencia:'🏦 Transferencia', efectivo:'💵 Efectivo'};
+const MET = {efectivo:'💵 Efectivo', bizum:'📱 Bizum', transferencia:'🏦 Transferencia'};
 const chip = e => `<span class="stc ${(EST[e] || {}).cls || ''}">${(EST[e] || {}).ico || ''} ${(EST[e] || {}).txt || e}</span>`;
 const quien = n => n && String(n).indexOf('@') < 0 ? String(n) : '';
 const maskIban = i => { const s = String(i || '').replace(/\s/g, ''); return s ? s.slice(0, 4) + ' •••• •••• ' + s.slice(-4) : '—'; };
@@ -718,7 +718,7 @@ function clientView(d) {
         <div class="qrwrap"><div id="qr"></div></div><div class="bar"><i id="bar"></i></div><small class="mut">Se renueva solo por seguridad</small></div>
       <div class="glass"><h3 style="margin-bottom:10px">💳 Tus datos de cobro</h3>
         <div class="dato"><span>🏦</span><div><small class="mut">Cuenta de cobros (IBAN)</small><b class="mono">${esc(u.iban)}</b></div>${copyBtn(u.iban, 'IBAN')}</div>
-        <div class="dato"><span>📱</span><div><small class="mut">Móvil para tus Bizum</small><b class="mono">${esc(u.telefono)}</b></div>${copyBtn(u.telefono, 'Teléfono')}</div>
+        <div class="dato"><span>📱</span><div><small class="mut">Teléfono</small><b class="mono">${esc(u.telefono)}</b></div>${copyBtn(u.telefono, 'Teléfono')}</div>
         <button class="btn ghost" style="width:100%;margin-top:10px" onclick="cambiarIbanModal()">✏️ Cambiar cuenta bancaria</button>
         <p class="mut" style="font-size:12px;margin:10px 0 0">¿Has cambiado de móvil? Avísanos en tienda y lo actualizamos.</p></div>
     </section>
@@ -733,7 +733,7 @@ function clientView(d) {
       <div class="glass"><b>¿Cómo funciona?</b><ol class="how">
         <li>Cuando te cobren el recibo de tu fibra o tu móvil, pulsa <b>Solicitar bonificación</b>.</li>
         <li>Indica el <b>importe</b> y la <b>fecha del cargo</b> en tu cuenta.</li>
-        <li>Te lo devolvemos por <b>Bizum</b>, <b>transferencia</b> o en <b>efectivo</b>, y aquí verás cuándo.</li></ol></div></section>
+        <li>Te avisamos cuando esté listo y aquí verás cuándo se ha pagado.</li></ol></div></section>
   </main>`;
   bindTilt(); showInst(); countEur($('#bal'), 0, d.resumen.cobrado); drawClient();
   $('#ask').onclick = askModal;
@@ -780,7 +780,6 @@ function askModal() {
     <label>IMPORTE QUE TE HAN COBRADO (€)</label><div class="money"><input id="sa" inputmode="decimal" placeholder="0,00" autocomplete="off"><span>€</span></div>
     <label>FECHA DEL CARGO EN TU CUENTA</label><input id="sf" type="date" max="${today()}" value="${today()}">
     <label>CONCEPTO (opcional)</label><input id="sc" maxlength="80" placeholder="Ej.: recibo fibra octubre">
-    <div class="box" style="font-size:13px"><b>¿Dónde lo recibirás?</b><br><span class="mut">📱 Bizum al <b style="color:#fff">${esc(u.telefono)}</b><br>🏦 o transferencia a <b style="color:#fff">${maskIban(u.iban)}</b></span></div>
     <div class="row" style="margin-top:16px"><button class="btn ghost" onclick="closeModal()">Cancelar</button><button class="btn" id="sok">Enviar solicitud</button></div>`);
   setTimeout(() => $('#sa').focus(), 150);
   $('#sok').onclick = e => act(e.currentTarget, async () => {
@@ -938,7 +937,7 @@ function pagoCampos(c) {
     <div class="box" style="font-size:13px" id="pinfo"></div>`;
 }
 function bindPago(c, getNeto) {
-  let m = 'bizum';
+  let m = 'efectivo';
   const info = () => { const n = Math.max(0, getNeto()); $('#pinfo').innerHTML = (m === 'bizum' ? '📱 Bizum al <b class="mono">' + esc(c.telefono) + '</b> ' + copyBtn(c.telefono, 'Teléfono') : m === 'transferencia' ? '🏦 Transferencia a <b class="mono">' + esc(c.iban) + '</b> ' + copyBtn(c.iban, 'IBAN') : '💵 Pago en efectivo en tienda')
     + '<br>Importe: <b>' + eur(n) + '</b> ' + copyBtn(n.toFixed(2).replace('.', ','), 'Importe'); };
   document.querySelectorAll('#pm button').forEach(b => b.onclick = () => { document.querySelectorAll('#pm button').forEach(x => x.classList.remove('on')); b.classList.add('on'); m = b.dataset.m; info(); });
