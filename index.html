@@ -546,7 +546,7 @@ async function boot() {
     }
   }
   if (!S.token) return authView('login');
-  $('#app').innerHTML = '<div class="auth"><div class="glass authbox" style="text-align:center"><span class="spin"></span><p class="mut" style="margin-top:12px">Conectando con el servidor…<br><small>Si Google va lento puede tardar unos segundos</small></p></div></div>';
+  $('#app').innerHTML = '<div style="min-height:100dvh;display:grid;place-items:center;padding:20px"><div class="glass authbox" style="text-align:center"><span class="spin"></span><p class="mut" style="margin-top:12px">Conectando con el servidor…<br><small>Si Google va lento puede tardar unos segundos</small></p></div></div>';
   try { const d = await call('me'); S.role = d.role; d.role === 'admin' ? adminView(d) : clientView(d); }
   catch (e) { if (S.token) { authView('login'); toast(e.message, 'bad'); } }
 }
