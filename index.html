@@ -775,6 +775,7 @@ function clientView(d) {
       });
       const nd = n.deudas || [];
       nd.forEach(x => { if (!S.deudas.some(y => y.id === x.id)) toast('📌 Nueva deuda anotada: ' + eur(x.importe), 'bad'); });
+      nd.forEach(x => { const a = S.deudas.find(y => y.id === x.id); if (a && cobr([x]) > cobr([a])) toast('💶 Pago de deuda registrado: ' + eur(cobr([x]) - cobr([a])) + (pend([x]) > 0 ? ' · te quedan ' + eur(pend([x])) : ' · ¡deuda saldada!'), 'ok'); });
       if (JSON.stringify(nd) !== JSON.stringify(S.deudas)) { S.deudas = nd; drawClient(); }
       if (JSON.stringify(n.solicitudes) !== JSON.stringify(S.sol)) {
         const old = S.res.cobrado; S.sol = n.solicitudes; S.res = n.resumen;
@@ -790,7 +791,7 @@ function drawClient() {
   $('#kpe').textContent = r.pendientes; $('#kca').textContent = eur(r.enCamino); $('#kto').textContent = r.total;
   const dd = S.deudas || []; $('#deudasBox').hidden = !dd.length;
   const dPend = dd.filter(x => x.estado === 'pendiente');
-  $('#deudas').innerHTML = (dPend.length ? `<div class="kv"><span>Pendiente de pagar</span><b class="neg">${eur(suma(dPend))}</b></div>` : '<div class="mut" style="font-size:13px;padding:4px 0">✨ No tienes deudas pendientes</div>') + dd.map(x => deudaRow(x)).join('');
+  $('#deudas').innerHTML = (dPend.length ? `<div class="kv"><span>Pendiente de pagar</span><b class="neg">${eur(pend(dPend))}</b></div>` : '<div class="mut" style="font-size:13px;padding:4px 0">✨ No tienes deudas pendientes</div>') + dd.map(x => deudaRow(x)).join('');
   const pg = pagosDe(S.sol); $('#pagosBox').hidden = !pg.length; $('#pagos').innerHTML = pg.map(p => pagoRow(p)).join('');
   const act_ = S.sol.filter(s => s.estado === 'pendiente' || s.estado === 'verificada'), arch = S.sol.filter(s => !(s.estado === 'pendiente' || s.estado === 'verificada'));
   $('#movs').innerHTML = act_.length ? act_.map(s => solRow(s)).join('') : S.sol.length ? '<div class="empty">✨ No tienes nada pendiente. ¡Todo pagado!</div>' : `<div class="empty">${piggySvg('pig-empty')}<br>Aún no has pedido ninguna bonificación.<br><b style="color:#fff">¡Pide la primera!</b></div>`;
@@ -898,6 +899,9 @@ function grupos(lista, clave) {
   return Object.values(g);
 }
 const suma = l => Math.round(l.reduce((a, s) => a + s.importe, 0) * 100) / 100;
+// lo que queda por pagar de una lista de deudas (si no viene el dato, la deuda entera)
+const pend = l => Math.round(l.reduce((a, d) => a + (d.pendiente !== undefined ? d.pendiente : (d.estado === 'pagada' ? 0 : d.importe)), 0) * 100) / 100;
+const cobr = l => Math.round(l.reduce((a, d) => a + (d.pagado !== undefined ? d.pagado : (d.estado === 'pagada' ? d.importe : 0)), 0) * 100) / 100;
 function datosCobro(s) {
   return `<div class="dato sm"><span>📱</span><div><small class="mut">Bizum</small><b class="mono">${esc(s.telefono)}</b></div>${copyBtn(s.telefono, 'Teléfono')}</div>
     <div class="dato sm"><span>🏦</span><div><small class="mut">IBAN</small><b class="mono">${esc(s.iban)}</b></div>${copyBtn(s.iban, 'IBAN')}</div>`;
@@ -990,10 +994,10 @@ function revisarGrupo(idCliente, soloIds) {
       <p class="mut" style="font-size:12px;margin:4px 0 8px">Los consumos extra no se bonifican: se descuentan del total.</p>
       <div class="seg" id="qx"><button data-v="no" class="on">No</button><button data-v="si">Sí</button></div>
       <div id="qxn" hidden><label>IMPORTE DE LOS CONSUMOS EXTRA (€)</label><div class="money"><input id="xn" inputmode="decimal" placeholder="0,00" autocomplete="off"><span>€</span></div></div></div>
-    ${dps.length ? `<div class="box"><b>📌 El cliente tiene ${eur(suma(dps))} de deuda pendiente. ¿Se la descuentas de este pago?</b>
+    ${dps.length ? `<div class="box"><b>📌 El cliente tiene ${eur(pend(dps))} de deuda pendiente. ¿Se la descuentas de este pago?</b>
       <p class="mut" style="font-size:12px;margin:4px 0 8px">Si dices que sí, se resta del total y la deuda queda pagada. Si dices que no, sigue pendiente.</p>
       <div class="seg" id="qd"><button data-v="no" class="on">No</button><button data-v="si">Sí</button></div>
-      <div id="qdn" hidden style="margin-top:8px">${dps.map(d => `<label class="sw" style="margin-top:6px"><input type="checkbox" class="dck" value="${esc(d.id)}" checked> ${esc(d.motivo)} · <b>${eur(d.importe)}</b></label>`).join('')}</div></div>` : ''}
+      <div id="qdn" hidden style="margin-top:8px">${dps.map(d => `<label class="sw" style="margin-top:6px"><input type="checkbox" class="dck" value="${esc(d.id)}" checked> ${esc(d.motivo)} · <b>${eur(pend([d]))}</b>${d.pagado ? ` <small class="mut">(de ${eur(d.importe)})</small>` : ''}</label>`).join('')}</div></div>` : ''}
     <div id="dsg"></div>
     ${pagoCampos(c)}
     <div class="row" style="margin-top:16px"><button class="btn ghost" onclick="closeModal()">Cancelar</button><button class="btn ok" id="pok">Marcar pagado</button></div>`);
@@ -1004,7 +1008,7 @@ function revisarGrupo(idCliente, soloIds) {
     const ids = sel(), t = suma(l.filter(s => ids.indexOf(s.id) >= 0));
     const lin = tiene ? Math.max(0, parseInt($('#ln').value) || 0) : 0, desc = Math.round(lin * dl * 100) / 100;
     const xs = exc ? Math.round((parseFloat($('#xn').value.replace(',', '.')) || 0) * 100) / 100 : 0;
-    const dIds = dsel(), dd = suma(dps.filter(d => dIds.indexOf(d.id) >= 0));
+    const dIds = dsel(), dd = pend(dps.filter(d => dIds.indexOf(d.id) >= 0));
     const neto = Math.round((t - desc - xs - dd) * 100) / 100;
     return {ids, t, lin, desc, xs, dIds, dd, neto};
   };
@@ -1116,7 +1120,7 @@ function newClient() {
 function fichaCliente(id) {
   const c = A.clients.find(x => x.id === id); if (!c) return;
   const sol = A.sol.filter(s => s.idCliente === id);
-  const deu = (A.deudas || []).filter(x => x.idCliente === id), deuPend = suma(deu.filter(x => x.estado === 'pendiente'));
+  const deu = (A.deudas || []).filter(x => x.idCliente === id), deuPend = pend(deu);
   modal(`<div class="mh"><div class="ic big">${c.nombre.trim().charAt(0).toUpperCase()}</div><div><h3>${esc(c.nombre)}</h3><small class="mut">${esc(c.email)} · ${c.id}${c.origen ? ' · ' + esc(c.origen) : ''}</small></div></div>
     <div class="stats3" style="margin-top:12px"><div class="mini2"><b class="pos">${eur(c.resumen.cobrado)}</b><small class="mut">pagado</small></div><div class="mini2"><b class="amb">${eur(c.resumen.enCamino)}</b><small class="mut">pendiente</small></div><div class="mini2"><b>${sol.length}</b><small class="mut">solicitudes</small></div></div>
     <div class="dato"><span>🏦</span><div><small class="mut">IBAN</small><b class="mono">${esc(c.iban)}</b></div>${copyBtn(c.iban, 'IBAN')}</div>
@@ -1149,11 +1153,13 @@ function fichaCliente(id) {
 
 /* — Deudas (las anota el admin; las ven el admin y el cliente) — */
 function deudaRow(x, admin) {
-  const pag = x.estado === 'pagada';
-  return `<div class="mv sol deuda ${pag ? 'pagada' : ''}"><div class="ic ${pag ? 'st-ok' : 'st-no'}">${pag ? '✅' : '📌'}</div>
-    <div class="t"><b>${admin && x.nombre ? esc(x.nombre) + ' · ' : ''}${esc(x.motivo)}</b><small>Anotada el ${fday(x.creada)}${pag ? (x.lote ? ' · descontada de un pago el ' : ' · pagada el ') + fday(x.fechaPago) : ' · pendiente'}${admin && x.pagadaPor && pag ? ' · 👤 ' + esc(quien(x.pagadaPor) || '') : ''}</small>
-    ${admin && !pag ? `<div class="row" style="margin-top:8px"><button class="btn ok sm" onclick="event.stopPropagation();pagarDeuda('${x.id}','${x.idCliente}')">✅ Marcar pagada</button><button class="btn ghost sm" onclick="event.stopPropagation();borrarDeuda('${x.id}','${x.idCliente}')">🗑️ Anular</button></div>` : ''}</div>
-    <div class="pts ${pag ? 'pos' : 'neg'}">${eur(x.importe)}<small>${pag ? 'pagada' : 'debe'}</small></div></div>`;
+  const pag = x.estado === 'pagada', pagos = x.pagos || [], queda = pend([x]), pagado = cobr([x]);
+  const lineas = pagos.map(p => `<div class="kv" style="padding:2px 0;font-size:12px"><span>${p.lote ? '✂️ Descontado de un pago' : '💶 Pagó'} el ${fday(p.fecha)}${admin && quien(p.cobradoPor) ? ' · 👤 ' + esc(quien(p.cobradoPor)) : ''}</span><b class="pos">${eur(p.importe)}</b></div>`).join('');
+  return `<div class="mv sol deuda ${pag ? 'pagada' : ''}" style="align-items:flex-start"><div class="ic ${pag ? 'st-ok' : 'st-no'}">${pag ? '✅' : '📌'}</div>
+    <div class="t"><b>${admin && x.nombre ? esc(x.nombre) + ' · ' : ''}${esc(x.motivo)}</b><small>Anotada el ${fday(x.creada)} · deuda de ${eur(x.importe)}${pag ? ' · pagada del todo' : pagado ? ' · lleva pagado ' + eur(pagado) : ''}</small>
+    ${lineas ? `<div style="margin-top:6px">${lineas}</div>` : ''}
+    ${admin && !pag ? `<div class="row" style="margin-top:8px"><button class="btn ok sm" onclick="event.stopPropagation();pagarDeuda('${x.id}','${x.idCliente}')">💶 Registrar pago</button>${pagos.length ? '' : `<button class="btn ghost sm" onclick="event.stopPropagation();borrarDeuda('${x.id}','${x.idCliente}')">🗑️ Anular</button>`}</div>` : ''}</div>
+    <div class="pts ${pag ? 'pos' : 'neg'}">${eur(pag ? x.importe : queda)}<small>${pag ? 'pagada' : 'aún debe'}</small></div></div>`;
 }
 function deudaModal(idCliente) {
   const c = A.clients.find(x => x.id === idCliente); if (!c) return;
@@ -1173,13 +1179,27 @@ function deudaModal(idCliente) {
 }
 function pagarDeuda(id, idCliente) {
   const x = (A.deudas || []).find(d => d.id === id); if (!x) return;
-  modal(`<div class="mh"><div class="ic big st-ok">✅</div><div><h3>Deuda pagada · ${eur(x.importe)}</h3><small class="mut">${esc(x.motivo)}</small></div></div>
-    ${empSel('dpq', '¿QUIÉN HA COBRADO LA DEUDA?')}
+  const queda = pend([x]);
+  modal(`<div class="mh"><div class="ic big st-ok">💶</div><div><h3>Pago de deuda</h3><small class="mut">${esc(x.motivo)} · deuda de ${eur(x.importe)}</small></div></div>
+    <div class="kv" style="margin-top:10px"><span>Le queda por pagar</span><b class="neg">${eur(queda)}</b></div>
+    <label>¿CUÁNTO PAGA AHORA? (€)</label><div class="money"><input id="dpa" inputmode="decimal" value="${queda.toFixed(2).replace('.', ',')}" autocomplete="off"><span>€</span></div>
+    <p class="mut" style="font-size:12px;margin:6px 0 0" id="dpr"></p>
+    ${empSel('dpq', '¿QUIÉN HA COBRADO?')}
     <label>FECHA DEL PAGO</label><input id="dpf" type="date" max="${today()}" value="${today()}">
-    <div class="row" style="margin-top:16px"><button class="btn ghost" onclick="fichaCliente('${idCliente}')">Cancelar</button><button class="btn ok" id="dpok">Marcar como pagada</button></div>`);
+    <div class="row" style="margin-top:16px"><button class="btn ghost" onclick="fichaCliente('${idCliente}')">Cancelar</button><button class="btn ok" id="dpok">Registrar pago</button></div>`);
+  const val = () => Math.round((parseFloat($('#dpa').value.replace(',', '.')) || 0) * 100) / 100;
+  const info = () => { const v = val(), r = Math.round((queda - v) * 100) / 100;
+    $('#dpr').innerHTML = v > queda + 0.004 ? '<span style="color:var(--bad)">⚠ Es más de lo que debe</span>' : r > 0 ? 'Pago parcial: seguirá debiendo <b>' + eur(r) + '</b>' : '✅ Con este pago la deuda queda saldada';
+    $('#dpok').textContent = r > 0 ? '💶 Registrar pago parcial (' + eur(v) + ')' : '✅ Registrar pago y saldar deuda'; };
+  $('#dpa').oninput = info; info();
   $('#dpok').onclick = e => act(e.currentTarget, async () => {
-    await call('pagarDeuda', {id, empleado:empVal('dpq', 'ha cobrado la deuda'), fechaPago:$('#dpf').value});
-    await loadAll(); fichaCliente(idCliente); toast('Deuda marcada como pagada', 'ok'); confetti(60);
+    const v = val();
+    if (!(v > 0)) throw new Error('Escribe cuánto paga');
+    if (v > queda + 0.004) throw new Error('Es más de lo que debe (' + eur(queda) + ')');
+    await call('pagarDeuda', {id, importe:v, empleado:empVal('dpq', 'ha cobrado'), fechaPago:$('#dpf').value});
+    await loadAll(); fichaCliente(idCliente);
+    const r = Math.round((queda - v) * 100) / 100;
+    toast(r > 0 ? 'Pago de ' + eur(v) + ' registrado · aún debe ' + eur(r) : 'Deuda saldada', 'ok'); confetti(60);
   });
 }
 function borrarDeuda(id, idCliente) {
@@ -1255,7 +1275,7 @@ function tabDeudas() {
     const v = $('#dq2').value.trim().toLowerCase();
     const r = all.filter(x => !v || (x.nombre + ' ' + x.motivo).toLowerCase().includes(v));
     const pe = r.filter(x => x.estado === 'pendiente'), pa = r.filter(x => x.estado === 'pagada');
-    $('#dsum').innerHTML = `<div class="mini2"><b class="neg">${eur(suma(pe))}</b><small class="mut">pendiente</small></div><div class="mini2"><b class="pos">${eur(suma(pa))}</b><small class="mut">cobrado</small></div><div class="mini2"><b>${r.length}</b><small class="mut">deudas</small></div>`;
+    $('#dsum').innerHTML = `<div class="mini2"><b class="neg">${eur(pend(r))}</b><small class="mut">pendiente</small></div><div class="mini2"><b class="pos">${eur(cobr(r))}</b><small class="mut">cobrado</small></div><div class="mini2"><b>${r.length}</b><small class="mut">deudas</small></div>`;
     $('#dl').innerHTML = r.map(x => deudaRow(x, true).replace('<div class="mv sol deuda', `<div onclick="fichaCliente('${x.idCliente}')" style="cursor:pointer" class="mv sol deuda`)).join('') || '<div class="empty">Sin deudas</div>';
   };
   $('#dq2').oninput = draw; draw(); bindHv();
