@@ -633,7 +633,7 @@ function pwModal() {
 /* ═════════ BONIFICACIONES: COMUNES ═════════ */
 const EST = {
   pendiente:  {ico:'⏳', txt:'Pendiente · en espera de pago', cls:'st-pe'},
-  verificada: {ico:'🔎', txt:'Verificado · en espera de pago', cls:'st-pa'},
+  verificada: {ico:'⏳', txt:'Pendiente · en espera de pago', cls:'st-pe'},
   pagada:     {ico:'✅', txt:'Pagado', cls:'st-ok'},
   rechazada:  {ico:'❌', txt:'Rechazada', cls:'st-no'},
   cancelada:  {ico:'⊘', txt:'Cancelada', cls:'st-ca'},
@@ -656,9 +656,8 @@ function countEur(el, from, to, ms = 1000) {
 function timeline(s, admin) {
   const paso = (on, ico, t, sub) => `<div class="tl-s ${on ? 'on' : ''}"><i>${ico}</i><div><b>${t}</b><small>${sub || ''}</small></div></div>`;
   if (s.estado === 'rechazada' || s.estado === 'cancelada') return `<div class="tl">${paso(true, '📝', 'Solicitada', fdate(s.creada))}${paso(true, EST[s.estado].ico, EST[s.estado].txt, s.motivo ? esc(s.motivo) : fdate(s.actualizada))}</div>`;
-  const vq = admin && quien(s.verificadoPor) ? ' · por ' + esc(s.verificadoPor) : '', pq = admin && quien(s.pagadoPor) ? ' · por ' + esc(s.pagadoPor) : '';
+  const pq = admin && quien(s.pagadoPor) ? ' · por ' + esc(s.pagadoPor) : '';
   return `<div class="tl">${paso(true, '📝', 'Solicitada', fdate(s.creada))}
-    ${paso(s.estado !== 'pendiente', '🔎', 'Verificada', s.verificada ? fday(s.verificada) + vq : 'Estamos revisándola')}
     ${paso(s.estado === 'pagada', '💸', 'Pagada', s.fechaPago ? fday(s.fechaPago) + ' · ' + (MET[s.metodo] || '') + pq : 'En espera de pago')}</div>`;
 }
 function loteInfo(s, lista) {
@@ -672,7 +671,7 @@ function pagosDe(lista) {
   lista.filter(s => s.estado === 'pagada').forEach(s => { const k = s.lote || s.id; (g[k] = g[k] || []).push(s); });
   return Object.values(g).map(l => {
     const c = l[0], total = Math.round(l.reduce((x, s) => x + s.importe, 0) * 100) / 100;
-    return {k: c.lote || c.id, nombre: c.nombre, idCliente: c.idCliente, fecha: c.fechaPago, metodo: c.metodo, items: l, total, quien: quien(c.pagadoPor), verif: quien(c.verificadoPor),
+    return {k: c.lote || c.id, nombre: c.nombre, idCliente: c.idCliente, fecha: c.fechaPago, metodo: c.metodo, items: l, total, quien: quien(c.pagadoPor), 
       lineas: c.lote ? c.lineas : 0, descuento: c.lote ? c.descuento : 0, neto: c.lote ? c.neto : total};
   }).sort((x, y) => new Date(y.fecha) - new Date(x.fecha));
 }
@@ -687,7 +686,7 @@ function pagoModal(k, admin) {
   const p = P_[k]; if (!p) return;
   modal(`<div class="mh"><div class="ic big st-ok">💸</div><div><h3>${eur(p.neto)}${admin ? ' · ' + esc(p.nombre) : ''}</h3><small class="mut">${MET[p.metodo] || ''} · pagado el ${fday(p.fecha)}</small></div></div>
     <div class="box"><b>🧾 Recibos incluidos</b>${filasRecibos(p.items)}${desglose(p.total, p.lineas, p.descuento, p.neto)}</div>
-    ${admin ? `<div class="kv" style="margin-top:8px"><span>Verificado por</span><b>${esc(p.verif || '—')}</b></div><div class="kv"><span>Pagado por</span><b>${esc(p.quien || '—')}</b></div>` : ''}
+    ${admin ? `<div class="kv" style="margin-top:8px"><span>Pagado por</span><b>${esc(p.quien || '—')}</b></div>` : ''}
     <div class="kv"><span>Estado</span>${chip('pagada')}</div>
     ${admin ? `<button class="btn ghost big" style="margin-top:10px" onclick="closeModal();fichaCliente('${p.idCliente}')">👤 Ver ficha del cliente</button>` : ''}
     <button class="btn big" style="margin-top:10px" onclick="closeModal()">Cerrar</button>`);
@@ -752,7 +751,6 @@ function clientView(d) {
       n.solicitudes.forEach(s => {
         const a = antes[s.id];
         if (a && a !== s.estado) {
-          if (s.estado === 'verificada') toast('🔎 Hemos verificado tu solicitud de ' + eur(s.importe) + '. ¡Pronto recibirás el pago!', 'ok');
           if (s.estado === 'pagada') { fiesta = true; toast('💸 ¡Te hemos pagado! ' + (MET[s.metodo] || ''), 'ok'); }
           if (s.estado === 'rechazada') toast('❌ Solicitud de ' + eur(s.importe) + ' rechazada', 'bad');
         }
@@ -790,7 +788,7 @@ function askModal() {
     closeModal(); S.sol.unshift(s); S.res.pendientes++; S.res.total++; S.res.enCamino = Math.round((S.res.enCamino + s.importe) * 100) / 100;
     drawClient(); confetti(80);
     modal(`<div style="text-align:center">${piggySvg('pig-big')}<h3>¡Solicitud enviada! 🎉</h3><p class="mut">Hemos recibido tu petición de <b style="color:#fff">${eur(s.importe)}</b>.</p>
-      <div class="wait24"><div class="clock">⏳</div><div><b>Ten un poquito de paciencia</b><span>Estamos revisando tu solicitud. Te avisaremos aquí en cuanto esté verificada y te hayamos pagado 💸</span></div></div>
+      <div class="wait24"><div class="clock">⏳</div><div><b>Ten un poquito de paciencia</b><span>Estamos revisando tu solicitud. Te avisaremos aquí en cuanto te hayamos pagado 💸</span></div></div>
       <button class="btn big" style="margin-top:8px" onclick="closeModal()">Genial</button></div>`);
   });
 }
@@ -876,18 +874,18 @@ function filasRecibos(l, check) {
 function grupoPendiente(l) {
   const c = l[0];
   return `<div class="glass scard st-pe" id="g_${c.idCliente}">
-    <div class="sc-top"><div><b>${esc(c.nombre)}</b><small class="mut">${l.length} recibo${l.length > 1 ? 's' : ''} por revisar · el último pedido ${fdate(l[l.length - 1].creada)}</small></div><div class="sc-imp">${eur(suma(l))}</div></div>
+    <div class="sc-top"><div><b>${esc(c.nombre)}</b><small class="mut">${l.length} recibo${l.length > 1 ? 's' : ''} pendiente${l.length > 1 ? 's' : ''} · el último pedido ${fdate(l[l.length - 1].creada)}</small></div><div class="sc-imp">${eur(suma(l))}</div></div>
     ${filasRecibos(l)}
     ${datosCobro(c)}
-    <div class="row" style="margin-top:12px"><button class="btn ghost" onclick="rechazarDe('${c.idCliente}')">❌ Rechazar…</button><button class="btn" onclick="revisarGrupo('${c.idCliente}')">🔎 Revisar${l.length > 1 ? ' (' + l.length + ')' : ''}</button></div></div>`;
+    <div class="row" style="margin-top:12px"><button class="btn ghost" onclick="rechazarDe('${c.idCliente}')">❌ Rechazar…</button><button class="btn" onclick="revisarGrupo('${c.idCliente}')">💸 Pagar${l.length > 1 ? ' (' + l.length + ')' : ''}</button></div></div>`;
 }
 function desglose(t, lin, desc, neto, lbl) {
   return `<div class="dsg"><div><span>Suma de recibos</span><b>${eur(t)}</b></div>${lin ? `<div class="neg"><span>− ${lin} línea${lin > 1 ? 's' : ''} × ${eur(desc / lin)}</span><b>− ${eur(desc)}</b></div>` : ''}<div class="tot"><span>${lbl || 'Total'}</span><b>${eur(neto)}</b></div></div>`;
 }
 function grupoVerificado(l) {
   const c = l[0];
-  return `<div class="glass scard st-pa" id="v_${c.lote}">
-    <div class="sc-top"><div><b>${esc(c.nombre)}</b><small class="mut">🔎 Verificado el ${fday(c.verificada)}${quien(c.verificadoPor) ? ' por <b style="color:#fff">' + esc(c.verificadoPor) + '</b>' : ''}${l.length > 1 ? ' · ' + l.length + ' recibos' : ''}</small></div><div class="sc-imp">${eur(c.neto)}</div></div>
+  return `<div class="glass scard st-pe" id="v_${c.lote}">
+    <div class="sc-top"><div><b>${esc(c.nombre)}</b><small class="mut">Pendiente de pago${l.length > 1 ? ' · ' + l.length + ' recibos' : ''}</small></div><div class="sc-imp">${eur(c.neto)}</div></div>
     ${filasRecibos(l)}${desglose(suma(l), c.lineas, c.descuento, c.neto, 'Total a pagar')}
     ${datosCobro(c)}
     <div class="row" style="margin-top:12px"><button class="btn ghost" onclick="reabrir('${c.id}')">↩ Deshacer</button><button class="btn ok" onclick="pagarVerificado('${c.lote}')">💸 Marcar pagado</button></div></div>`;
@@ -910,13 +908,11 @@ function tabPe() {
   const gpe = grupos(pe, s => s.idCliente), gve = grupos(ve, s => s.lote || s.id);
   const netoVe = gve.reduce((a, l) => a + (l[0].neto ?? suma(l)), 0);
   $('#tab').innerHTML = `<div class="stack">
-    <div class="stats"><div class="glass stat"><span class="mut">⏳ Por revisar</span><b class="amb">${eur(suma(pe))}</b><small class="mut">${pe.length} recibos de ${gpe.length} cliente${gpe.length === 1 ? '' : 's'}</small></div>
-      <div class="glass stat"><span class="mut">🔎 Verificado, por pagar</span><b class="blu">${eur(netoVe)}</b><small class="mut">${gve.length} pago${gve.length === 1 ? '' : 's'} pendiente${gve.length === 1 ? '' : 's'}</small></div></div>
+    <div class="stats"><div class="glass stat"><span class="mut">⏳ Pendiente de pago</span><b class="amb">${eur(suma(pe) + netoVe)}</b><small class="mut">${pe.length + ve.length} recibos de ${gpe.length} cliente${gpe.length === 1 ? '' : 's'}</small></div></div>
     <button class="btn ghost big" onclick="scanModal()">📷 Escanear QR de un cliente</button>
-    <h3 class="sec">⏳ Pendientes de revisar <small class="mut" style="font-weight:500">· agrupados por cliente</small></h3>
-    <div class="cards">${gpe.length ? gpe.map(grupoPendiente).join('') : '<div class="glass empty">🎉 No hay nada por revisar</div>'}</div>
-    <h3 class="sec">🔎 Verificados, en espera de pago</h3>
-    <div class="cards">${gve.length ? gve.map(grupoVerificado).join('') : '<div class="glass empty">No hay pagos pendientes</div>'}</div></div>`;
+    <h3 class="sec">⏳ Pendientes de pago <small class="mut" style="font-weight:500">· agrupados por cliente</small></h3>
+    <div class="cards">${gpe.length ? gpe.map(grupoPendiente).join('') : '<div class="glass empty">🎉 No hay nada pendiente</div>'}</div>
+    ${gve.length ? '<div class="cards">' + gve.map(grupoVerificado).join('') + '</div>' : ''}</div>`;
 }
 function upd(s) { const i = A.sol.findIndex(x => x.id === s.id); if (i >= 0) A.sol[i] = Object.assign(A.sol[i], s); navBadges(); }
 function refreshTab() { closeModal(); tab(A.tab); }
@@ -943,11 +939,11 @@ function bindPago(c, getNeto) {
   document.querySelectorAll('#pm button').forEach(b => b.onclick = () => { document.querySelectorAll('#pm button').forEach(x => x.classList.remove('on')); b.classList.add('on'); m = b.dataset.m; info(); });
   info(); return { metodo: () => m, info };
 }
-/* PASO 1: revisar y verificar (opcionalmente pagar a la vez) */
+/* Pagar: pendiente → pagada (se archiva) */
 function revisarGrupo(idCliente, soloIds) {
   const l = A.sol.filter(s => s.estado === 'pendiente' && s.idCliente === idCliente && (!soloIds || soloIds.indexOf(s.id) >= 0)).reverse();
   if (!l.length) return; const c = l[0], dl = A.descLinea || 3;
-  modal(`<div class="mh"><div class="ic big st-pe">🔎</div><div><h3>Revisar solicitudes</h3><small class="mut">${esc(c.nombre)} · ${l.length} recibo${l.length > 1 ? 's' : ''}</small></div></div>
+  modal(`<div class="mh"><div class="ic big st-pe">💸</div><div><h3>Pagar bonificación</h3><small class="mut">${esc(c.nombre)} · ${l.length} recibo${l.length > 1 ? 's' : ''}</small></div></div>
     <p class="mut" style="font-size:13px;margin:6px 0 0">Comprueba cada cargo con los movimientos de su cuenta (${maskIban(c.iban)}). Desmarca el que no esté bien.</p>
     ${filasRecibos(l, true)}
     <div class="box"><b>📱 ¿El cliente tiene líneas móviles contratadas?</b>
@@ -955,11 +951,9 @@ function revisarGrupo(idCliente, soloIds) {
       <div class="seg" id="ql"><button data-v="no" class="on">No</button><button data-v="si">Sí</button></div>
       <div id="qn" hidden><label>¿CUÁNTAS LÍNEAS?</label><div class="stepper"><button type="button" id="lm">−</button><input id="ln" inputmode="numeric" value="1"><button type="button" id="lp">＋</button></div></div></div>
     <div id="dsg"></div>
-    ${empSel('qv', '¿QUIÉN LO HA VERIFICADO?')}
-    <div class="box"><b>💸 ¿Ya está pagado?</b><div class="seg" id="yp" style="margin-top:8px"><button data-v="no" class="on">No, solo verificar</button><button data-v="si">Sí, ya está pagado</button></div>
-      <div id="ypf" hidden>${pagoCampos(c)}</div></div>
-    <div class="row" style="margin-top:16px"><button class="btn ghost" onclick="closeModal()">Cancelar</button><button class="btn" id="pok">Verificar</button></div>`);
-  let tiene = false, pagado = false;
+    ${pagoCampos(c)}
+    <div class="row" style="margin-top:16px"><button class="btn ghost" onclick="closeModal()">Cancelar</button><button class="btn ok" id="pok">Marcar pagado</button></div>`);
+  let tiene = false;
   const sel = () => [...document.querySelectorAll('.rck')].filter(x => x.checked).map(x => x.value);
   const vals = () => {
     const ids = sel(), t = suma(l.filter(s => ids.indexOf(s.id) >= 0));
@@ -969,7 +963,7 @@ function revisarGrupo(idCliente, soloIds) {
   const calc = () => {
     const {ids, t, lin, desc, neto} = vals();
     $('#dsg').innerHTML = desglose(t, lin, desc, neto, 'Total a pagar') + (neto < 0 ? '<p style="color:var(--bad);font-size:13px">⚠ El descuento supera la suma de los recibos</p>' : '');
-    $('#pok').textContent = !ids.length ? 'Marca algún recibo' : pagado ? '💸 Verificar y marcar pagado (' + eur(Math.max(0, neto)) + ')' : '🔎 Verificar ' + eur(Math.max(0, neto));
+    $('#pok').textContent = !ids.length ? 'Marca algún recibo' : '💸 Marcar pagado (' + eur(Math.max(0, neto)) + ')';
     $('#pok').disabled = !ids.length || neto < 0;
     if (P) P.info();
     return {ids, lin, neto};
@@ -977,7 +971,6 @@ function revisarGrupo(idCliente, soloIds) {
   let P = null;
   document.querySelectorAll('.rck').forEach(x => x.onchange = calc);
   document.querySelectorAll('#ql button').forEach(b => b.onclick = () => { document.querySelectorAll('#ql button').forEach(x => x.classList.toggle('on', x === b)); tiene = b.dataset.v === 'si'; $('#qn').hidden = !tiene; calc(); if (tiene) $('#ln').focus(); });
-  document.querySelectorAll('#yp button').forEach(b => b.onclick = () => { document.querySelectorAll('#yp button').forEach(x => x.classList.toggle('on', x === b)); pagado = b.dataset.v === 'si'; $('#ypf').hidden = !pagado; calc(); });
   $('#ln').oninput = calc;
   $('#lm').onclick = () => { $('#ln').value = Math.max(1, (parseInt($('#ln').value) || 1) - 1); calc(); };
   $('#lp').onclick = () => { $('#ln').value = (parseInt($('#ln').value) || 0) + 1; calc(); };
@@ -986,21 +979,15 @@ function revisarGrupo(idCliente, soloIds) {
   $('#pok').onclick = e => act(e.currentTarget, async () => {
     const {ids, lin} = vals();
     if (tiene && !(lin > 0)) throw new Error('Indica cuántas líneas tiene');
-    const verif = empVal('qv', 'ha verificado las solicitudes');
-    if (pagado) {
-      const emp = empVal('pq', 'ha hecho el pago');
-      const r = await call('pagarLote', {ids, lineas:lin, metodo:P.metodo(), fechaPago:$('#pf').value, empleado:emp, verificadoPor:verif});
-      r.solicitudes.forEach(upd); refreshTab(); toast('💸 Pago de ' + eur(r.neto) + ' registrado y archivado', 'ok'); coinRain(16); confetti(80);
-    } else {
-      const r = await call('verificarLote', {ids, lineas:lin, empleado:verif});
-      r.solicitudes.forEach(upd); refreshTab(); toast('🔎 Verificado: ' + eur(r.neto) + ' en espera de pago', 'ok');
-    }
+    const emp = empVal('pq', 'ha hecho el pago');
+    const r = await call('pagarLote', {ids, lineas:lin, metodo:P.metodo(), fechaPago:$('#pf').value, empleado:emp});
+    r.solicitudes.forEach(upd); refreshTab(); toast('💸 Pago de ' + eur(r.neto) + ' registrado y archivado', 'ok'); coinRain(16); confetti(80);
   });
 }
-/* PASO 2: pagar lo verificado → se archiva */
+/* (compatibilidad) solicitudes antiguas en estado verificada */
 function pagarVerificado(lote) {
   const l = A.sol.filter(s => s.lote === lote && s.estado === 'verificada'); if (!l.length) return; const c = l[0];
-  modal(`<div class="mh"><div class="ic big st-pa">💸</div><div><h3>Marcar pagado</h3><small class="mut">${esc(c.nombre)} · verificado${quien(c.verificadoPor) ? ' por ' + esc(c.verificadoPor) : ''}</small></div></div>
+  modal(`<div class="mh"><div class="ic big st-pa">💸</div><div><h3>Marcar pagado</h3><small class="mut">${esc(c.nombre)}</small></div></div>
     ${filasRecibos(l)}${desglose(suma(l), c.lineas, c.descuento, c.neto, 'Total a pagar')}
     ${pagoCampos(c)}
     <div class="row" style="margin-top:16px"><button class="btn ghost" onclick="closeModal()">Cancelar</button><button class="btn ok" id="pok">💸 Confirmar pago de ${eur(c.neto)}</button></div>`);
@@ -1028,14 +1015,14 @@ function rechazar(id) {
 async function reabrir(id) {
   const s = A.sol.find(x => x.id === id);
   const n = s && s.lote ? A.sol.filter(x => x.lote === s.lote).length : 1;
-  const que = s && s.estado === 'pagada' ? 'el pago' : 'la verificación';
+  const que = 'el pago';
   if (!confirm(n > 1 ? 'Esto incluye ' + n + ' recibos. ¿Deshacer ' + que + ' y dejar los ' + n + ' otra vez pendientes?' : '¿Deshacer ' + que + ' y volver a dejar la solicitud pendiente?')) return;
   try { await call('reabrir', {id}); await loadAll(); refreshTab(); toast('Vuelve a estar pendiente', 'ok'); } catch (e) { toast(e.message, 'bad'); }
 }
 function solModalAdmin(id) {
   const s = A.sol.find(x => x.id === id); if (!s) return;
-  const acc = s.estado === 'pendiente' ? `<button class="btn ghost" onclick="rechazar('${s.id}')">❌ Rechazar</button><button class="btn" onclick="revisarGrupo('${s.idCliente}')">🔎 Revisar</button>`
-    : s.estado === 'verificada' ? `<button class="btn ghost" onclick="reabrir('${s.id}')">↩ Deshacer</button><button class="btn ok" onclick="pagarVerificado('${s.lote}')">💸 Marcar pagado</button>`
+  const acc = s.estado === 'pendiente' ? `<button class="btn ghost" onclick="rechazar('${s.id}')">❌ Rechazar</button><button class="btn" onclick="revisarGrupo('${s.idCliente}')">💸 Pagar</button>`
+    : s.estado === 'verificada' ? `<button class="btn ok" onclick="pagarVerificado('${s.lote}')">💸 Marcar pagado</button>`
     : s.estado === 'pagada' ? `<button class="btn ghost" onclick="reabrir('${s.id}')">↩ Deshacer el pago</button>` : `<button class="btn ghost" onclick="reabrir('${s.id}')">↩ Volver a pendiente</button>`;
   modal(`<div class="mh"><div class="ic big ${EST[s.estado].cls}">${EST[s.estado].ico}</div><div><h3>${eur(s.importe)} · ${esc(s.nombre)}</h3><small class="mut">${s.id} · ${esc(s.concepto || 'Sin concepto')}</small></div></div>
     <div class="box"><div class="kv"><span>Fecha del cargo</span><b>${fday(s.fechaCargo)}</b></div><div class="kv"><span>Estado</span>${chip(s.estado)}</div>
@@ -1079,7 +1066,7 @@ function fichaCliente(id) {
     <div class="stats3" style="margin-top:12px"><div class="mini2"><b class="pos">${eur(c.resumen.cobrado)}</b><small class="mut">pagado</small></div><div class="mini2"><b class="amb">${eur(c.resumen.enCamino)}</b><small class="mut">pendiente</small></div><div class="mini2"><b>${sol.length}</b><small class="mut">solicitudes</small></div></div>
     <div class="dato"><span>🏦</span><div><small class="mut">IBAN</small><b class="mono">${esc(c.iban)}</b></div>${copyBtn(c.iban, 'IBAN')}</div>
     <div class="dato"><span>📱</span><div><small class="mut">Bizum</small><b class="mono">${esc(c.telefono)}</b></div>${copyBtn(c.telefono, 'Teléfono')}</div>
-    ${sol.some(s => s.estado === 'pendiente') ? `<button class="btn big pulse" style="margin-top:12px" onclick="revisarGrupo('${id}')">🔎 Revisar (${sol.filter(s => s.estado === 'pendiente').length}) · ${eur(suma(sol.filter(s => s.estado === 'pendiente')))}</button>` : ''}
+    ${sol.some(s => s.estado === 'pendiente') ? `<button class="btn big pulse" style="margin-top:12px" onclick="revisarGrupo('${id}')">💸 Pagar (${sol.filter(s => s.estado === 'pendiente').length}) · ${eur(suma(sol.filter(s => s.estado === 'pendiente')))}</button>` : ''}
     ${grupos(sol.filter(s => s.estado === 'verificada'), s => s.lote).map(g => `<button class="btn ok big" style="margin-top:10px" onclick="pagarVerificado('${g[0].lote}')">💸 Marcar pagado · ${eur(g[0].neto)}</button>`).join('')}
     <details class="box"><summary style="cursor:pointer">✏️ Editar datos</summary>
       <label>NOMBRE</label><input id="e1" value="${esc(c.nombre)}"><label>TELÉFONO</label><input id="e2" value="${esc(c.telefono)}">
@@ -1103,7 +1090,7 @@ function fichaCliente(id) {
 function tabHi() {
   A.hf = A.hf || ''; A.hv = A.hv || 'pagos';
   if (A.hv === 'pagos') return tabPagos();
-  $('#tab').innerHTML = `<div class="glass">${hvSeg()}<div class="seg wrapseg" id="hf" style="margin-top:12px">${[['', 'Todas'], ['pendiente', '⏳ Pendientes'], ['verificada', '🔎 Verificadas'], ['pagada', '✅ Pagadas'], ['rechazada', '❌ Rechazadas'], ['cancelada', '⊘ Canceladas']].map(([k, l]) => `<button data-f="${k}" class="${A.hf === k ? 'on' : ''}">${l}</button>`).join('')}</div>
+  $('#tab').innerHTML = `<div class="glass">${hvSeg()}<div class="seg wrapseg" id="hf" style="margin-top:12px">${[['', 'Todas'], ['pendiente', '⏳ Pendientes'], ['pagada', '✅ Pagadas'], ['rechazada', '❌ Rechazadas'], ['cancelada', '⊘ Canceladas']].map(([k, l]) => `<button data-f="${k}" class="${A.hf === k ? 'on' : ''}">${l}</button>`).join('')}</div>
     <input id="hq" placeholder="Buscar por cliente, concepto, nº de solicitud, teléfono o cuenta…" style="margin-top:12px"><div id="hl" style="margin-top:6px"></div><div class="mut" id="hsum" style="text-align:right;font-size:13px;margin-top:8px"></div></div>`;
   const draw = () => {
     const v = $('#hq').value.trim().toLowerCase();
@@ -1139,8 +1126,7 @@ async function tabSt() {
     const s = await call('stats');
     $('#tab').innerHTML = `<div class="stack"><div class="stats">
       <div class="glass stat"><span class="mut">👥 Clientes activos</span><b>${num(s.activos)}</b></div>
-      <div class="glass stat"><span class="mut">⏳ Por revisar</span><b class="amb">${eur(s.importePendiente)}</b><small class="mut">${s.pendientes} solicitudes</small></div>
-      <div class="glass stat"><span class="mut">🔎 Verificado, por pagar</span><b class="blu">${eur(s.importeVerificado)}</b><small class="mut">${s.verificadas} solicitudes</small></div>
+      <div class="glass stat"><span class="mut">⏳ Pendiente de pago</span><b class="amb">${eur(s.importePendiente + (s.importeVerificado || 0))}</b><small class="mut">${s.pendientes + (s.verificadas || 0)} solicitudes</small></div>
       <div class="glass stat"><span class="mut">📅 Pagado este mes</span><b class="pos">${eur(s.pagadoMes)}</b></div>
       <div class="glass stat"><span class="mut">💰 Pagado en total</span><b class="pos">${eur(s.importePagado)}</b><small class="mut">${s.pagadas} recibos pagados</small></div>
       <div class="glass stat"><span class="mut">📱 Descontado por líneas</span><b class="neg">${eur(s.descuentos)}</b></div></div>
@@ -1149,7 +1135,7 @@ async function tabSt() {
       <div class="glass" style="max-width:520px"><h3>🔔 Avisos</h3>
         <label class="sw"><input type="checkbox" id="av" ${s.config.avisoAdmin ? 'checked' : ''}> Enviarme un correo cada vez que un cliente pida una bonificación</label>
         <p class="mut" style="font-size:12px;margin:6px 0 0">Gmail permite unos 100 correos al día desde la app.</p></div>
-      <div class="glass" style="max-width:520px"><h3>👷 Empleados</h3><p class="mut" style="font-size:13px;margin:6px 0 0">Las personas que verifican y hacen los pagos. Al verificar o pagar tendrás que elegir quién fue.</p>
+      <div class="glass" style="max-width:520px"><h3>👷 Empleados</h3><p class="mut" style="font-size:13px;margin:6px 0 0">Las personas que hacen los pagos. Al pagar tendrás que elegir quién fue.</p>
         <div id="emls" style="margin-top:10px"></div>
         <div class="row" style="margin-top:10px"><input id="emn" maxlength="40" placeholder="Nombre del empleado"><button class="btn" style="flex:none" id="emadd">＋ Añadir</button></div></div>
       <div class="glass" style="max-width:520px" id="totpbox"><h3>Acceso con Google Authenticator</h3><p class="mut">Cargando…</p></div></div>`;
