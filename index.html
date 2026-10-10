@@ -299,8 +299,13 @@ async function call(action, data = {}) {
   for (let i = 0; i < 4 && !j; i++) {
     if (i) await new Promise(r => setTimeout(r, 800 * i));
     try {
-      const r = await fetch(API, {method:'POST', credentials:'omit', cache:'no-store', headers:{'Content-Type':'text/plain;charset=utf-8'}, body});
-      const t = await r.text();
+      // si el servidor se queda colgado, cortamos a los 15 s y reintentamos (las escrituras no se duplican gracias al rid)
+      const ctl = new AbortController(), tmo = setTimeout(() => ctl.abort(), 15000);
+      let t;
+      try {
+        const r = await fetch(API, {method:'POST', credentials:'omit', cache:'no-store', headers:{'Content-Type':'text/plain;charset=utf-8'}, body, signal:ctl.signal});
+        t = await r.text();
+      } finally { clearTimeout(tmo); }
       try { j = JSON.parse(t); } catch (e) { j = null; }
       red = false;
     } catch (e) { red = true; }
@@ -1039,7 +1044,7 @@ function revisarGrupo(idCliente, soloIds) {
     if (exc && !(xs > 0)) throw new Error('Escribe el importe de los consumos extra');
     const emp = empVal('pq', 'ha hecho el pago');
     const r = await call('pagarLote', {ids, lineas:lin, excesos:xs, deudas:dIds, metodo:P.metodo(), fechaPago:$('#pf').value, empleado:emp});
-    r.solicitudes.forEach(upd); if (dIds.length) await loadAll(); refreshTab(); toast('💸 Pago de ' + eur(r.neto) + ' registrado y archivado', 'ok'); coinRain(16); confetti(80);
+    r.solicitudes.forEach(upd); if (r.deudas) setDeudas(c.idCliente, r.deudas); refreshTab(); toast('💸 Pago de ' + eur(r.neto) + ' registrado y archivado', 'ok'); coinRain(16); confetti(80);
   });
 }
 /* (compatibilidad) solicitudes antiguas en estado verificada */
@@ -1146,12 +1151,17 @@ function fichaCliente(id) {
   call('ibanHist', {id}).then(h => { const el = $('#ibh'); if (el && h.length) el.innerHTML = `<details class="box"><summary style="cursor:pointer">🏦 Cambios de cuenta bancaria (${h.length})</summary>${h.map(x => `<div class="kv" style="flex-wrap:wrap"><span>${fdate(x.fecha)}</span><b class="mono" style="font-size:12px"><s class="mut">${esc(x.anterior)}</s> → ${esc(x.nuevo)}</b></div>`).join('')}</details>`; }).catch(() => {});
   $('#eok').onclick = e => act(e.currentTarget, async () => {
     if (!ibanValido($('#e4').value)) throw new Error('El IBAN no es correcto');
-    await call('updateClient', {id, nombre:$('#e1').value, telefono:$('#e2').value, iban:$('#e4').value, activo:$('#e3').checked});
-    await loadAll(); fichaCliente(id); toast('Guardado', 'ok');
+    Object.assign(c, await call('updateClient', {id, nombre:$('#e1').value, telefono:$('#e2').value, iban:$('#e4').value, activo:$('#e3').checked}));
+    fichaCliente(id); toast('Guardado', 'ok');
   });
 }
 
 /* — Deudas (las anota el admin; las ven el admin y el cliente) — */
+// Actualiza en pantalla las deudas de un cliente con lo que devuelve el servidor (sin recargar todo)
+function setDeudas(idCliente, lista) {
+  A.deudas = (A.deudas || []).filter(d => d.idCliente !== idCliente).concat(lista || []);
+  const c = A.clients.find(x => x.id === idCliente); if (c) c.deuda = pend(lista || []);
+}
 function deudaRow(x, admin) {
   const pag = x.estado === 'pagada', pagos = x.pagos || [], queda = pend([x]), pagado = cobr([x]);
   const lineas = pagos.map(p => `<div class="kv" style="padding:2px 0;font-size:12px"><span>${p.lote ? '✂️ Descontado de un pago' : '💶 Pagó'} el ${fday(p.fecha)}${admin && quien(p.cobradoPor) ? ' · 👤 ' + esc(quien(p.cobradoPor)) : ''}</span><b class="pos">${eur(p.importe)}</b></div>`).join('');
@@ -1173,8 +1183,8 @@ function deudaModal(idCliente) {
     const imp = $('#da').value.replace(',', '.');
     if (!(parseFloat(imp) > 0)) throw new Error('Escribe el importe');
     if (!$('#dm').value.trim()) throw new Error('Escribe el motivo de la deuda');
-    await call('crearDeuda', {idCliente, importe:imp, motivo:$('#dm').value, empleado:empVal('dq', 'anota la deuda')});
-    await loadAll(); fichaCliente(idCliente); toast('Deuda anotada', 'ok');
+    setDeudas(idCliente, await call('crearDeuda', {idCliente, importe:imp, motivo:$('#dm').value, empleado:empVal('dq', 'anota la deuda')}));
+    fichaCliente(idCliente); toast('Deuda anotada', 'ok');
   });
 }
 function pagarDeuda(id, idCliente) {
@@ -1196,15 +1206,15 @@ function pagarDeuda(id, idCliente) {
     const v = val();
     if (!(v > 0)) throw new Error('Escribe cuánto paga');
     if (v > queda + 0.004) throw new Error('Es más de lo que debe (' + eur(queda) + ')');
-    await call('pagarDeuda', {id, importe:v, empleado:empVal('dpq', 'ha cobrado'), fechaPago:$('#dpf').value});
-    await loadAll(); fichaCliente(idCliente);
+    setDeudas(idCliente, await call('pagarDeuda', {id, importe:v, empleado:empVal('dpq', 'ha cobrado'), fechaPago:$('#dpf').value}));
+    fichaCliente(idCliente);
     const r = Math.round((queda - v) * 100) / 100;
     toast(r > 0 ? 'Pago de ' + eur(v) + ' registrado · aún debe ' + eur(r) : 'Deuda saldada', 'ok'); confetti(60);
   });
 }
 function borrarDeuda(id, idCliente) {
   if (!confirm('¿Anular esta deuda? Desaparecerá también para el cliente (úsalo solo si se anotó por error).')) return;
-  call('borrarDeuda', {id}).then(async () => { await loadAll(); fichaCliente(idCliente); toast('Deuda anulada', 'ok'); }).catch(e => toast(e.message, 'bad'));
+  call('borrarDeuda', {id}).then(l => { setDeudas(idCliente, l); fichaCliente(idCliente); toast('Deuda anulada', 'ok'); }).catch(e => toast(e.message, 'bad'));
 }
 function pagoDirectoModal(idCliente) {
   const c = A.clients.find(x => x.id === idCliente); if (!c) return;
@@ -1220,8 +1230,9 @@ function pagoDirectoModal(idCliente) {
   $('#pdok').onclick = e => act(e.currentTarget, async () => {
     const imp = $('#pda').value.replace(',', '.');
     if (!(parseFloat(imp) > 0)) throw new Error('Escribe el importe');
-    await call('pagoDirecto', {idCliente, importe:imp, fechaCargo:$('#pdc').value, concepto:$('#pdo').value, empleado:empVal('pdq', 'ha hecho el pago'), fechaPago:$('#pdf').value});
-    await loadAll(); fichaCliente(idCliente); toast('Pago registrado', 'ok'); confetti(60);
+    const s = await call('pagoDirecto', {idCliente, importe:imp, fechaCargo:$('#pdc').value, concepto:$('#pdo').value, empleado:empVal('pdq', 'ha hecho el pago'), fechaPago:$('#pdf').value});
+    A.sol.unshift(s); c.resumen.cobrado = Math.round((c.resumen.cobrado + s.importe) * 100) / 100;
+    fichaCliente(idCliente); toast('Pago registrado', 'ok'); confetti(60);
   });
 }
 
