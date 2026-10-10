@@ -305,7 +305,7 @@ async function call(action, data = {}) {
       red = false;
     } catch (e) { red = true; }
   }
-  if (!j) throw new Error(red ? 'Sin conexión con el servidor' : 'El servidor de Google no responde ahora mismo. Inténtalo de nuevo en unos segundos');
+  if (!j) throw new Error(red ? 'Sin conexión con el servidor' : 'El servidor está saturado en este momento. Inténtalo de nuevo en unos segundos');
   if (!j.ok) { if (/Sesión caducada/.test(j.error) && S.token) logout(true); throw new Error(j.error); }
   return j.data;
 }
@@ -546,7 +546,7 @@ async function boot() {
     }
   }
   if (!S.token) return authView('login');
-  $('#app').innerHTML = '<div style="min-height:100dvh;display:grid;place-items:center;padding:20px"><div class="glass authbox" style="text-align:center"><span class="spin"></span><p class="mut" style="margin-top:12px">Conectando con el servidor…<br><small>Si Google va lento puede tardar unos segundos</small></p></div></div>';
+  $('#app').innerHTML = '<div style="min-height:100dvh;display:grid;place-items:center;padding:20px"><div class="glass authbox" style="text-align:center"><span class="spin"></span><p class="mut" style="margin-top:12px">Conectando con el servidor…<br><small>Si hay mucha demanda puede tardar unos segundos</small></p></div></div>';
   try { const d = await call('me'); S.role = d.role; d.role === 'admin' ? adminView(d) : clientView(d); }
   catch (e) { if (S.token) { authView('login'); toast(e.message, 'bad'); } }
 }
