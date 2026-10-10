@@ -938,7 +938,7 @@ function pagoCampos(c) {
 }
 function bindPago(c, getNeto) {
   let m = 'efectivo';
-  const info = () => { const n = Math.max(0, getNeto()); $('#pinfo').innerHTML = (m === 'bizum' ? '📱 Bizum al <b class="mono">' + esc(c.telefono) + '</b> ' + copyBtn(c.telefono, 'Teléfono') : m === 'transferencia' ? '🏦 Transferencia a <b class="mono">' + esc(c.iban) + '</b> ' + copyBtn(c.iban, 'IBAN') : '💵 Pago en efectivo en tienda')
+  const info = () => { const n = Math.max(0, getNeto()); $('#pinfo').innerHTML = (m === 'bizum' ? '📱 Bizum al <b class="mono">' + esc(c.telefono) + '</b> ' + copyBtn(c.telefono, 'Teléfono') : m === 'transferencia' ? '🏦 Transferencia a <b class="mono">' + esc(c.iban) + '</b> ' + copyBtn(c.iban, 'IBAN') : '💵 Pago en efectivo')
     + '<br>Importe: <b>' + eur(n) + '</b> ' + copyBtn(n.toFixed(2).replace('.', ','), 'Importe'); };
   document.querySelectorAll('#pm button').forEach(b => b.onclick = () => { document.querySelectorAll('#pm button').forEach(x => x.classList.remove('on')); b.classList.add('on'); m = b.dataset.m; info(); });
   info(); return { metodo: () => m, info };
