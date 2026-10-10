@@ -1,6 +1,6 @@
 // Service worker: permite instalar la app y abrirla sin conexión (la interfaz).
 // Los datos (solicitudes y pagos) siempre van a la red: nunca se cachean.
-const VERSION = 'bf-v7';
+const VERSION = 'bf-v8';
 const SHELL = ['./', 'index.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', e => {

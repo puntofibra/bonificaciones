@@ -126,6 +126,11 @@ label{display:block;font-size:12px;color:var(--mut);margin:12px 0 6px;letter-spa
 .adm main{padding-bottom:90px}
 .sel .big{font-size:42px;font-weight:800}
 .sel .who2{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+textarea{width:100%;background:rgba(0,0,0,.35);border:1px solid var(--bd);border-radius:13px;padding:12px 14px;outline:0;color:inherit;font:inherit;resize:vertical;margin-top:10px}
+textarea:focus{border-color:var(--a);box-shadow:0 0 0 4px rgba(236,72,153,.2)}
+.tag.neg{background:rgba(248,113,113,.18);color:#fca5a5}.deuda.pagada{opacity:.75}
+.nota{border-top:1px solid var(--bd);padding:10px 0 4px;margin-top:10px}.ntxt{white-space:pre-wrap;word-break:break-word;font-size:14px;line-height:1.45}
+.nmeta{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:6px}
 .box{background:rgba(0,0,0,.25);border:1px solid var(--bd);border-radius:16px;padding:14px;margin-top:14px}
 .prev{margin-top:8px;color:var(--b);font-size:14px;min-height:20px}
 #reader{border-radius:16px;overflow:hidden;margin-top:12px}
@@ -285,12 +290,22 @@ const fday = i => new Date(i).toLocaleDateString('es-ES', {day:'2-digit', month:
 const S = {token: localStorage.getItem('bf_t') || '', role:'', user:null, poll:null, sol:[], res:{}};
 const A = {clients:[], sol:[], tab:'pe', hf:''};
 
+// Google a veces devuelve una página de error HTML ("No se puede abrir el archivo") en vez de la respuesta.
+// Reintentamos solos; las acciones que escriben llevan un id (rid) para que el servidor no las repita.
 async function call(action, data = {}) {
-  let r;
-  try {
-    r = await fetch(API, {method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body: JSON.stringify({action, token:S.token, ...data})});
-  } catch (e) { throw new Error('Sin conexión con el servidor'); }
-  const j = await r.json();
+  const rid = Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+  const body = JSON.stringify({action, token:S.token, rid, ...data});
+  let j = null, red = false;
+  for (let i = 0; i < 4 && !j; i++) {
+    if (i) await new Promise(r => setTimeout(r, 800 * i));
+    try {
+      const r = await fetch(API, {method:'POST', credentials:'omit', cache:'no-store', headers:{'Content-Type':'text/plain;charset=utf-8'}, body});
+      const t = await r.text();
+      try { j = JSON.parse(t); } catch (e) { j = null; }
+      red = false;
+    } catch (e) { red = true; }
+  }
+  if (!j) throw new Error(red ? 'Sin conexión con el servidor' : 'El servidor de Google no responde ahora mismo. Inténtalo de nuevo en unos segundos');
   if (!j.ok) { if (/Sesión caducada/.test(j.error) && S.token) logout(true); throw new Error(j.error); }
   return j.data;
 }
@@ -639,6 +654,7 @@ const EST = {
   cancelada:  {ico:'⊘', txt:'Cancelada', cls:'st-ca'},
 };
 const MET = {efectivo:'💵 Efectivo', bizum:'📱 Bizum', transferencia:'🏦 Transferencia'};
+const METL = {...MET, compania:'🏢 Pagado a la compañía'};
 const chip = e => `<span class="stc ${(EST[e] || {}).cls || ''}">${(EST[e] || {}).ico || ''} ${(EST[e] || {}).txt || e}</span>`;
 const quien = n => n && String(n).indexOf('@') < 0 ? String(n) : '';
 const maskIban = i => { const s = String(i || '').replace(/\s/g, ''); return s ? s.slice(0, 4) + ' •••• •••• ' + s.slice(-4) : '—'; };
@@ -658,7 +674,7 @@ function timeline(s, admin) {
   if (s.estado === 'rechazada' || s.estado === 'cancelada') return `<div class="tl">${paso(true, '📝', 'Solicitada', fdate(s.creada))}${paso(true, EST[s.estado].ico, EST[s.estado].txt, s.motivo ? esc(s.motivo) : fdate(s.actualizada))}</div>`;
   const pq = admin && quien(s.pagadoPor) ? ' · por ' + esc(s.pagadoPor) : '';
   return `<div class="tl">${paso(true, '📝', 'Solicitada', fdate(s.creada))}
-    ${paso(s.estado === 'pagada', '💸', 'Pagada', s.fechaPago ? fday(s.fechaPago) + ' · ' + (MET[s.metodo] || '') + pq : 'En espera de pago')}</div>`;
+    ${paso(s.estado === 'pagada', '💸', 'Pagada', s.fechaPago ? fday(s.fechaPago) + ' · ' + (METL[s.metodo] || '') + pq : 'En espera de pago')}</div>`;
 }
 function loteInfo(s, lista) {
   if (!s.lote) return '';
@@ -672,20 +688,20 @@ function pagosDe(lista) {
   return Object.values(g).map(l => {
     const c = l[0], total = Math.round(l.reduce((x, s) => x + s.importe, 0) * 100) / 100;
     return {k: c.lote || c.id, nombre: c.nombre, idCliente: c.idCliente, fecha: c.fechaPago, metodo: c.metodo, items: l, total, quien: quien(c.pagadoPor), 
-      lineas: c.lote ? c.lineas : 0, descuento: c.lote ? c.descuento : 0, excesos: c.lote ? (c.excesos || 0) : 0, neto: c.lote ? c.neto : total};
+      lineas: c.lote ? c.lineas : 0, descuento: c.lote ? c.descuento : 0, excesos: c.lote ? (c.excesos || 0) : 0, deuda: c.lote ? (c.deudaDesc || 0) : 0, neto: c.lote ? c.neto : total};
   }).sort((x, y) => new Date(y.fecha) - new Date(x.fecha));
 }
 function pagoRow(p, admin) {
   P_[p.k] = p;
   return `<div class="mv sol" onclick="pagoModal('${p.k}', ${admin ? 1 : 0})"><div class="ic st-ok">💸</div>
-    <div class="t"><b>${admin ? esc(p.nombre) : (MET[p.metodo] || 'Pago')}</b><small>${fday(p.fecha)} · ${p.items.length} recibo${p.items.length > 1 ? 's' : ''}${p.lineas ? ' · −' + eur(p.descuento) + ' líneas' : ''}${p.excesos ? ' · −' + eur(p.excesos) + ' extras' : ''}${admin ? ' · ' + (MET[p.metodo] || '') + (p.quien ? ' · 👤 ' + esc(p.quien) : '') : ''}</small></div>
+    <div class="t"><b>${admin ? esc(p.nombre) : (METL[p.metodo] || 'Pago')}</b><small>${fday(p.fecha)} · ${p.items.length} recibo${p.items.length > 1 ? 's' : ''}${p.lineas ? ' · −' + eur(p.descuento) + ' líneas' : ''}${p.excesos ? ' · −' + eur(p.excesos) + ' extras' : ''}${p.deuda ? ' · −' + eur(p.deuda) + ' deuda' : ''}${admin ? ' · ' + (METL[p.metodo] || '') + (p.quien ? ' · 👤 ' + esc(p.quien) : '') : ''}</small></div>
     <div class="pts pos">${eur(p.neto)}<small>${p.items.length > 1 ? 'de ' + eur(p.total) : ''}</small></div></div>`;
 }
 const P_ = {};
 function pagoModal(k, admin) {
   const p = P_[k]; if (!p) return;
-  modal(`<div class="mh"><div class="ic big st-ok">💸</div><div><h3>${eur(p.neto)}${admin ? ' · ' + esc(p.nombre) : ''}</h3><small class="mut">${MET[p.metodo] || ''} · pagado el ${fday(p.fecha)}</small></div></div>
-    <div class="box"><b>🧾 Recibos incluidos</b>${filasRecibos(p.items)}${desglose(p.total, p.lineas, p.descuento, p.neto, '', p.excesos)}</div>
+  modal(`<div class="mh"><div class="ic big st-ok">💸</div><div><h3>${eur(p.neto)}${admin ? ' · ' + esc(p.nombre) : ''}</h3><small class="mut">${METL[p.metodo] || ''} · pagado el ${fday(p.fecha)}</small></div></div>
+    <div class="box"><b>🧾 Recibos incluidos</b>${filasRecibos(p.items)}${desglose(p.total, p.lineas, p.descuento, p.neto, '', p.excesos, p.deuda)}</div>
     ${admin ? `<div class="kv" style="margin-top:8px"><span>Pagado por</span><b>${esc(p.quien || '—')}</b></div>` : ''}
     <div class="kv"><span>Estado</span>${chip('pagada')}</div>
     ${admin ? `<button class="btn ghost big" style="margin-top:10px" onclick="closeModal();fichaCliente('${p.idCliente}')">👤 Ver ficha del cliente</button>` : ''}
@@ -703,7 +719,7 @@ function solRow(s, admin) {
     <div class="pts ${s.estado === 'pagada' ? 'pos' : s.estado === 'rechazada' || s.estado === 'cancelada' ? 'off2' : ''}">${eur(s.importe)}<small>${s.id}</small></div></div>`;
 }
 function clientView(d) {
-  S.user = d.user; S.sol = d.solicitudes; S.res = d.resumen;
+  S.user = d.user; S.sol = d.solicitudes; S.res = d.resumen; S.deudas = d.deudas || [];
   const u = d.user;
   $('#app').innerHTML = `${topbar(u.nombre)}
   <main class="wrap cgrid">
@@ -727,6 +743,7 @@ function clientView(d) {
         <div class="glass mini"><span>🚀</span><b id="kca">${eur(d.resumen.enCamino)}</b><small class="mut">en camino</small></div>
         <div class="glass mini"><span>🧾</span><b id="kto">${d.resumen.total}</b><small class="mut">solicitudes</small></div></div>
       <div class="glass"><h3 style="margin-bottom:6px">⏳ En espera de pago</h3><div id="movs"></div></div>
+      <div class="glass deudasBox" id="deudasBox" hidden><h3 style="margin-bottom:6px">📌 Deudas</h3><div id="deudas"></div></div>
       <div class="glass" id="pagosBox" hidden><h3 style="margin-bottom:6px">💸 Pagos recibidos</h3><div id="pagos"></div></div>
       <details class="glass" id="archBox" hidden><summary style="cursor:pointer;font-weight:700">📦 Archivo de solicitudes <span class="mut" id="archN"></span></summary><div id="arch" style="margin-top:6px"></div></details>
       <div class="glass"><b>¿Cómo funciona?</b><ol class="how">
@@ -751,10 +768,13 @@ function clientView(d) {
       n.solicitudes.forEach(s => {
         const a = antes[s.id];
         if (a && a !== s.estado) {
-          if (s.estado === 'pagada') { fiesta = true; toast('💸 ¡Te hemos pagado! ' + (MET[s.metodo] || ''), 'ok'); }
+          if (s.estado === 'pagada') { fiesta = true; toast('💸 ¡Te hemos pagado! ' + (METL[s.metodo] || ''), 'ok'); }
           if (s.estado === 'rechazada') toast('❌ Solicitud de ' + eur(s.importe) + ' rechazada', 'bad');
         }
       });
+      const nd = n.deudas || [];
+      nd.forEach(x => { if (!S.deudas.some(y => y.id === x.id)) toast('📌 Nueva deuda anotada: ' + eur(x.importe), 'bad'); });
+      if (JSON.stringify(nd) !== JSON.stringify(S.deudas)) { S.deudas = nd; drawClient(); }
       if (JSON.stringify(n.solicitudes) !== JSON.stringify(S.sol)) {
         const old = S.res.cobrado; S.sol = n.solicitudes; S.res = n.resumen;
         if (old !== n.resumen.cobrado) countEur($('#bal'), old, n.resumen.cobrado);
@@ -767,6 +787,9 @@ function drawClient() {
   const r = S.res;
   $('#eur').innerHTML = r.enCamino > 0 ? '🚀 ' + eur(r.enCamino) + ' en camino' : r.total ? 'Todo al día ✨' : 'Pide tu primera bonificación';
   $('#kpe').textContent = r.pendientes; $('#kca').textContent = eur(r.enCamino); $('#kto').textContent = r.total;
+  const dd = S.deudas || []; $('#deudasBox').hidden = !dd.length;
+  const dPend = dd.filter(x => x.estado === 'pendiente');
+  $('#deudas').innerHTML = (dPend.length ? `<div class="kv"><span>Pendiente de pagar</span><b class="neg">${eur(suma(dPend))}</b></div>` : '<div class="mut" style="font-size:13px;padding:4px 0">✨ No tienes deudas pendientes</div>') + dd.map(x => deudaRow(x)).join('');
   const pg = pagosDe(S.sol); $('#pagosBox').hidden = !pg.length; $('#pagos').innerHTML = pg.map(p => pagoRow(p)).join('');
   const act_ = S.sol.filter(s => s.estado === 'pendiente' || s.estado === 'verificada'), arch = S.sol.filter(s => !(s.estado === 'pendiente' || s.estado === 'verificada'));
   $('#movs').innerHTML = act_.length ? act_.map(s => solRow(s)).join('') : S.sol.length ? '<div class="empty">✨ No tienes nada pendiente. ¡Todo pagado!</div>' : `<div class="empty">${piggySvg('pig-empty')}<br>Aún no has pedido ninguna bonificación.<br><b style="color:#fff">¡Pide la primera!</b></div>`;
@@ -784,7 +807,14 @@ function askModal() {
     const imp = $('#sa').value.replace(',', '.');
     if (!(parseFloat(imp) > 0)) throw new Error('Escribe el importe del cargo');
     if (!$('#sf').value) throw new Error('Elige la fecha del cargo');
-    const s = await call('solicitar', {importe:imp, fechaCargo:$('#sf').value, concepto:$('#sc').value});
+    const datos = {importe:imp, fechaCargo:$('#sf').value, concepto:$('#sc').value};
+    let s;
+    try { s = await call('solicitar', datos); }
+    catch (err) {
+      if (!/^DUPLICADO:/.test(err.message)) throw err;
+      if (!confirm(err.message.replace(/^DUPLICADO:\s*/, '') + '\n\n¿Es otro cargo distinto del mismo día? Pulsa Aceptar para enviarlo también.')) return;
+      s = await call('solicitar', {...datos, confirmarDuplicado:true});
+    }
     closeModal(); S.sol.unshift(s); S.res.pendientes++; S.res.total++; S.res.enCamino = Math.round((S.res.enCamino + s.importe) * 100) / 100;
     drawClient(); confetti(80);
     modal(`<div style="text-align:center">${piggySvg('pig-big')}<h3>¡Solicitud enviada! 🎉</h3><p class="mut">Hemos recibido tu petición de <b style="color:#fff">${eur(s.importe)}</b>.</p>
@@ -796,7 +826,7 @@ function solModal(id) {
   const s = S.sol.find(x => x.id === id); if (!s) return;
   modal(`<div class="mh"><div class="ic big ${EST[s.estado].cls}">${EST[s.estado].ico}</div><div><h3>${eur(s.importe)}</h3><small class="mut">${esc(s.concepto || 'Bonificación de recibo')} · ${s.id}</small></div></div>
     <div class="box"><div class="kv"><span>Fecha del cargo</span><b>${fday(s.fechaCargo)}</b></div><div class="kv"><span>Estado</span>${chip(s.estado)}</div>
-    ${s.metodo ? `<div class="kv"><span>Pagado por</span><b>${MET[s.metodo]}</b></div>` : ''}${s.motivo ? `<div class="kv"><span>Motivo</span><b>${esc(s.motivo)}</b></div>` : ''}</div>
+    ${s.metodo ? `<div class="kv"><span>Pagado por</span><b>${METL[s.metodo]}</b></div>` : ''}${s.motivo ? `<div class="kv"><span>Motivo</span><b>${esc(s.motivo)}</b></div>` : ''}</div>
     ${loteInfo(s, S.sol)}${timeline(s)}
     <div class="row" style="margin-top:16px">${s.estado === 'pendiente' ? '<button class="btn ghost" id="scx">Cancelar solicitud</button>' : ''}<button class="btn" onclick="closeModal()">Cerrar</button></div>`);
   const x = $('#scx'); if (x) x.onclick = e => { if (confirm('¿Cancelar esta solicitud de ' + eur(s.importe) + '?')) act(e.currentTarget, async () => {
@@ -843,7 +873,7 @@ async function adminView(d) {
   }, 20000);
 }
 async function loadAll() {
-  try { [A.clients, A.sol] = await Promise.all([call('clients'), call('solicitudes', {})]); } catch (e) { toast(e.message, 'bad'); }
+  try { [A.clients, A.sol, A.deudas] = await Promise.all([call('clients'), call('solicitudes', {}), call('deudas', {})]); } catch (e) { toast(e.message, 'bad'); }
   call('empleados').then(e => { A.emps = e; }).catch(() => {});
   if (!A.descLinea) call('stats').then(st => { A.descLinea = st.config.descLinea; }).catch(() => {});
 }
@@ -879,8 +909,8 @@ function grupoPendiente(l) {
     ${datosCobro(c)}
     <div class="row" style="margin-top:12px"><button class="btn ghost" onclick="rechazarDe('${c.idCliente}')">❌ Rechazar…</button><button class="btn" onclick="revisarGrupo('${c.idCliente}')">💸 Pagar${l.length > 1 ? ' (' + l.length + ')' : ''}</button></div></div>`;
 }
-function desglose(t, lin, desc, neto, lbl, exc) {
-  return `<div class="dsg"><div><span>Suma de recibos</span><b>${eur(t)}</b></div>${lin ? `<div class="neg"><span>− ${lin} línea${lin > 1 ? 's' : ''} × ${eur(desc / lin)}</span><b>− ${eur(desc)}</b></div>` : ''}${exc ? `<div class="neg"><span>− Consumos extra</span><b>− ${eur(exc)}</b></div>` : ''}<div class="tot"><span>${lbl || 'Total'}</span><b>${eur(neto)}</b></div></div>`;
+function desglose(t, lin, desc, neto, lbl, exc, deu) {
+  return `<div class="dsg"><div><span>Suma de recibos</span><b>${eur(t)}</b></div>${lin ? `<div class="neg"><span>− ${lin} línea${lin > 1 ? 's' : ''} × ${eur(desc / lin)}</span><b>− ${eur(desc)}</b></div>` : ''}${exc ? `<div class="neg"><span>− Consumos extra</span><b>− ${eur(exc)}</b></div>` : ''}${deu ? `<div class="neg"><span>− Deuda descontada</span><b>− ${eur(deu)}</b></div>` : ''}<div class="tot"><span>${lbl || 'Total'}</span><b>${eur(neto)}</b></div></div>`;
 }
 function grupoVerificado(l) {
   const c = l[0];
@@ -943,6 +973,7 @@ function bindPago(c, getNeto) {
 function revisarGrupo(idCliente, soloIds) {
   const l = A.sol.filter(s => s.estado === 'pendiente' && s.idCliente === idCliente && (!soloIds || soloIds.indexOf(s.id) >= 0)).reverse();
   if (!l.length) return; const c = l[0], dl = A.descLinea || 3;
+  const dps = (A.deudas || []).filter(d => d.idCliente === idCliente && d.estado === 'pendiente');
   modal(`<div class="mh"><div class="ic big st-pe">💸</div><div><h3>Pagar bonificación</h3><small class="mut">${esc(c.nombre)} · ${l.length} recibo${l.length > 1 ? 's' : ''}</small></div></div>
     <p class="mut" style="font-size:13px;margin:6px 0 0">Comprueba cada cargo con los movimientos de su cuenta (${maskIban(c.iban)}). Desmarca el que no esté bien.</p>
     ${filasRecibos(l, true)}
@@ -954,21 +985,27 @@ function revisarGrupo(idCliente, soloIds) {
       <p class="mut" style="font-size:12px;margin:4px 0 8px">Los consumos extra no se bonifican: se descuentan del total.</p>
       <div class="seg" id="qx"><button data-v="no" class="on">No</button><button data-v="si">Sí</button></div>
       <div id="qxn" hidden><label>IMPORTE DE LOS CONSUMOS EXTRA (€)</label><div class="money"><input id="xn" inputmode="decimal" placeholder="0,00" autocomplete="off"><span>€</span></div></div></div>
+    ${dps.length ? `<div class="box"><b>📌 El cliente tiene ${eur(suma(dps))} de deuda pendiente. ¿Se la descuentas de este pago?</b>
+      <p class="mut" style="font-size:12px;margin:4px 0 8px">Si dices que sí, se resta del total y la deuda queda pagada. Si dices que no, sigue pendiente.</p>
+      <div class="seg" id="qd"><button data-v="no" class="on">No</button><button data-v="si">Sí</button></div>
+      <div id="qdn" hidden style="margin-top:8px">${dps.map(d => `<label class="sw" style="margin-top:6px"><input type="checkbox" class="dck" value="${esc(d.id)}" checked> ${esc(d.motivo)} · <b>${eur(d.importe)}</b></label>`).join('')}</div></div>` : ''}
     <div id="dsg"></div>
     ${pagoCampos(c)}
     <div class="row" style="margin-top:16px"><button class="btn ghost" onclick="closeModal()">Cancelar</button><button class="btn ok" id="pok">Marcar pagado</button></div>`);
-  let tiene = false, exc = false;
+  let tiene = false, exc = false, deu = false;
+  const dsel = () => deu ? [...document.querySelectorAll('.dck')].filter(x => x.checked).map(x => x.value) : [];
   const sel = () => [...document.querySelectorAll('.rck')].filter(x => x.checked).map(x => x.value);
   const vals = () => {
     const ids = sel(), t = suma(l.filter(s => ids.indexOf(s.id) >= 0));
     const lin = tiene ? Math.max(0, parseInt($('#ln').value) || 0) : 0, desc = Math.round(lin * dl * 100) / 100;
     const xs = exc ? Math.round((parseFloat($('#xn').value.replace(',', '.')) || 0) * 100) / 100 : 0;
-    const neto = Math.round((t - desc - xs) * 100) / 100;
-    return {ids, t, lin, desc, xs, neto};
+    const dIds = dsel(), dd = suma(dps.filter(d => dIds.indexOf(d.id) >= 0));
+    const neto = Math.round((t - desc - xs - dd) * 100) / 100;
+    return {ids, t, lin, desc, xs, dIds, dd, neto};
   };
   const calc = () => {
-    const {ids, t, lin, desc, xs, neto} = vals();
-    $('#dsg').innerHTML = desglose(t, lin, desc, neto, 'Total a pagar', xs) + (neto < 0 ? '<p style="color:var(--bad);font-size:13px">⚠ Los descuentos superan la suma de los recibos</p>' : '');
+    const {ids, t, lin, desc, xs, dd, neto} = vals();
+    $('#dsg').innerHTML = desglose(t, lin, desc, neto, 'Total a pagar', xs, dd) + (neto < 0 ? '<p style="color:var(--bad);font-size:13px">⚠ Los descuentos superan la suma de los recibos</p>' : '');
     $('#pok').textContent = !ids.length ? 'Marca algún recibo' : '💸 Marcar pagado (' + eur(Math.max(0, neto)) + ')';
     $('#pok').disabled = !ids.length || neto < 0;
     if (P) P.info();
@@ -980,17 +1017,20 @@ function revisarGrupo(idCliente, soloIds) {
   document.querySelectorAll('#qx button').forEach(b => b.onclick = () => { document.querySelectorAll('#qx button').forEach(x => x.classList.toggle('on', x === b)); exc = b.dataset.v === 'si'; $('#qxn').hidden = !exc; calc(); if (exc) $('#xn').focus(); });
   $('#xn').oninput = calc;
   $('#ln').oninput = calc;
+  document.querySelectorAll('#qd button').forEach(b => b.onclick = () => { document.querySelectorAll('#qd button').forEach(x => x.classList.toggle('on', x === b)); deu = b.dataset.v === 'si'; $('#qdn').hidden = !deu; calc(); });
+  document.querySelectorAll('.dck').forEach(x => x.onchange = calc);
   $('#lm').onclick = () => { $('#ln').value = Math.max(1, (parseInt($('#ln').value) || 1) - 1); calc(); };
   $('#lp').onclick = () => { $('#ln').value = (parseInt($('#ln').value) || 0) + 1; calc(); };
   P = bindPago(c, () => vals().neto);
   calc();
   $('#pok').onclick = e => act(e.currentTarget, async () => {
-    const {ids, lin, xs} = vals();
+    const {ids, lin, xs, dIds} = vals();
+    if (deu && !dIds.length) throw new Error('Marca qué deuda descuentas, o elige No');
     if (tiene && !(lin > 0)) throw new Error('Indica cuántas líneas tiene');
     if (exc && !(xs > 0)) throw new Error('Escribe el importe de los consumos extra');
     const emp = empVal('pq', 'ha hecho el pago');
-    const r = await call('pagarLote', {ids, lineas:lin, excesos:xs, metodo:P.metodo(), fechaPago:$('#pf').value, empleado:emp});
-    r.solicitudes.forEach(upd); refreshTab(); toast('💸 Pago de ' + eur(r.neto) + ' registrado y archivado', 'ok'); coinRain(16); confetti(80);
+    const r = await call('pagarLote', {ids, lineas:lin, excesos:xs, deudas:dIds, metodo:P.metodo(), fechaPago:$('#pf').value, empleado:emp});
+    r.solicitudes.forEach(upd); if (dIds.length) await loadAll(); refreshTab(); toast('💸 Pago de ' + eur(r.neto) + ' registrado y archivado', 'ok'); coinRain(16); confetti(80);
   });
 }
 /* (compatibilidad) solicitudes antiguas en estado verificada */
@@ -1049,7 +1089,7 @@ function tabCl() {
       || (dig.length >= 3 && c.telefono.replace(/\D/g, '').includes(dig))
       || (vv.length >= 4 && c.iban.replace(/[^A-Za-z0-9]/g, '').toLowerCase().includes(vv)));
     $('#cl').innerHTML = r.map(c => `<div class="mv ${c.activo ? '' : 'off'}" style="cursor:pointer" onclick="fichaCliente('${c.id}')"><div class="ic">${c.nombre.trim().charAt(0).toUpperCase()}</div>
-      <div class="t"><b>${esc(c.nombre)}${c.activo ? '' : '<span class="tag">BAJA</span>'}${c.pendientes ? `<span class="tag amb">${c.pendientes} pendiente${c.pendientes > 1 ? 's' : ''}</span>` : ''}</b><small>${esc(c.telefono)} · ${maskIban(c.iban)}</small></div>
+      <div class="t"><b>${esc(c.nombre)}${c.activo ? '' : '<span class="tag">BAJA</span>'}${c.deuda ? `<span class="tag neg">debe ${eur(c.deuda)}</span>` : ''}${c.pendientes ? `<span class="tag amb">${c.pendientes} pendiente${c.pendientes > 1 ? 's' : ''}</span>` : ''}</b><small>${esc(c.telefono)} · ${maskIban(c.iban)}</small></div>
       <div class="pts">${eur(c.resumen.cobrado)}<small>pagado</small></div></div>`).join('') || '<div class="empty">No hay clientes todavía</div>';
   };
   $('#cq').oninput = draw; draw();
@@ -1071,12 +1111,19 @@ function newClient() {
 function fichaCliente(id) {
   const c = A.clients.find(x => x.id === id); if (!c) return;
   const sol = A.sol.filter(s => s.idCliente === id);
+  const deu = (A.deudas || []).filter(x => x.idCliente === id), deuPend = suma(deu.filter(x => x.estado === 'pendiente'));
   modal(`<div class="mh"><div class="ic big">${c.nombre.trim().charAt(0).toUpperCase()}</div><div><h3>${esc(c.nombre)}</h3><small class="mut">${esc(c.email)} · ${c.id}${c.origen ? ' · ' + esc(c.origen) : ''}</small></div></div>
     <div class="stats3" style="margin-top:12px"><div class="mini2"><b class="pos">${eur(c.resumen.cobrado)}</b><small class="mut">pagado</small></div><div class="mini2"><b class="amb">${eur(c.resumen.enCamino)}</b><small class="mut">pendiente</small></div><div class="mini2"><b>${sol.length}</b><small class="mut">solicitudes</small></div></div>
     <div class="dato"><span>🏦</span><div><small class="mut">IBAN</small><b class="mono">${esc(c.iban)}</b></div>${copyBtn(c.iban, 'IBAN')}</div>
     <div class="dato"><span>📱</span><div><small class="mut">Bizum</small><b class="mono">${esc(c.telefono)}</b></div>${copyBtn(c.telefono, 'Teléfono')}</div>
     ${sol.some(s => s.estado === 'pendiente') ? `<button class="btn big pulse" style="margin-top:12px" onclick="revisarGrupo('${id}')">💸 Pagar (${sol.filter(s => s.estado === 'pendiente').length}) · ${eur(suma(sol.filter(s => s.estado === 'pendiente')))}</button>` : ''}
     ${grupos(sol.filter(s => s.estado === 'verificada'), s => s.lote).map(g => `<button class="btn ok big" style="margin-top:10px" onclick="pagarVerificado('${g[0].lote}')">💸 Marcar pagado · ${eur(g[0].neto)}</button>`).join('')}
+    <div class="box notas"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b>🔒 Notas privadas</b><small class="mut">solo las ve el administrador, el cliente no</small></div>
+      <textarea id="nt" rows="3" maxlength="2000" placeholder="Escribe una nota sobre este cliente…"></textarea>
+      <button class="btn sm" style="margin-top:8px" id="ntok">💾 Guardar nota</button>
+      <div id="ntl"><div class="mut" style="padding:10px 0;font-size:13px">Cargando notas…</div></div></div>
+    <div class="row" style="margin-top:12px"><button class="btn ghost" onclick="pagoDirectoModal('${id}')">🏢 Pago directo</button><button class="btn ghost" onclick="deudaModal('${id}')">📌 Anotar deuda</button></div>
+    ${deu.length ? `<h3 style="margin:16px 0 4px;font-size:16px">📌 Deudas ${deuPend ? `<span class="neg" style="font-size:14px">· debe ${eur(deuPend)}</span>` : ''}</h3><div>${deu.map(x => deudaRow(x, true)).join('')}</div>` : ''}
     <details class="box"><summary style="cursor:pointer">✏️ Editar datos</summary>
       <label>NOMBRE</label><input id="e1" value="${esc(c.nombre)}"><label>TELÉFONO</label><input id="e2" value="${esc(c.telefono)}">
       <label>IBAN</label>${ibanField('e4', c.iban)}
@@ -1086,7 +1133,7 @@ function fichaCliente(id) {
     <h3 style="margin:16px 0 4px;font-size:16px">💸 Pagos realizados (archivo)</h3><div>${pagosDe(sol).map(p => pagoRow(p)).join('') || '<div class="empty">Aún no se le ha pagado nada</div>'}</div>
     <h3 style="margin:16px 0 4px;font-size:16px">🧾 Solicitudes</h3><div>${sol.length ? sol.map(s => solRow(s, true)).join('') : '<div class="empty">Sin solicitudes</div>'}</div>
     <button class="btn ghost big" style="margin-top:14px" onclick="closeModal()">Cerrar</button>`);
-  ibanLive($('#e4'));
+  ibanLive($('#e4')); notasCliente(id);
   call('ibanHist', {id}).then(h => { const el = $('#ibh'); if (el && h.length) el.innerHTML = `<details class="box"><summary style="cursor:pointer">🏦 Cambios de cuenta bancaria (${h.length})</summary>${h.map(x => `<div class="kv" style="flex-wrap:wrap"><span>${fdate(x.fecha)}</span><b class="mono" style="font-size:12px"><s class="mut">${esc(x.anterior)}</s> → ${esc(x.nuevo)}</b></div>`).join('')}</details>`; }).catch(() => {});
   $('#eok').onclick = e => act(e.currentTarget, async () => {
     if (!ibanValido($('#e4').value)) throw new Error('El IBAN no es correcto');
@@ -1095,10 +1142,94 @@ function fichaCliente(id) {
   });
 }
 
+/* — Deudas (las anota el admin; las ven el admin y el cliente) — */
+function deudaRow(x, admin) {
+  const pag = x.estado === 'pagada';
+  return `<div class="mv sol deuda ${pag ? 'pagada' : ''}"><div class="ic ${pag ? 'st-ok' : 'st-no'}">${pag ? '✅' : '📌'}</div>
+    <div class="t"><b>${admin && x.nombre ? esc(x.nombre) + ' · ' : ''}${esc(x.motivo)}</b><small>Anotada el ${fday(x.creada)}${pag ? (x.lote ? ' · descontada de un pago el ' : ' · pagada el ') + fday(x.fechaPago) : ' · pendiente'}${admin && x.pagadaPor && pag ? ' · 👤 ' + esc(quien(x.pagadaPor) || '') : ''}</small>
+    ${admin && !pag ? `<div class="row" style="margin-top:8px"><button class="btn ok sm" onclick="event.stopPropagation();pagarDeuda('${x.id}','${x.idCliente}')">✅ Marcar pagada</button><button class="btn ghost sm" onclick="event.stopPropagation();borrarDeuda('${x.id}','${x.idCliente}')">🗑️ Anular</button></div>` : ''}</div>
+    <div class="pts ${pag ? 'pos' : 'neg'}">${eur(x.importe)}<small>${pag ? 'pagada' : 'debe'}</small></div></div>`;
+}
+function deudaModal(idCliente) {
+  const c = A.clients.find(x => x.id === idCliente); if (!c) return;
+  modal(`<div class="mh"><div class="ic big st-no">📌</div><div><h3>Anotar deuda</h3><small class="mut">${esc(c.nombre)} · el cliente la verá en su app</small></div></div>
+    <label>IMPORTE (€)</label><div class="money"><input id="da" inputmode="decimal" placeholder="0,00" autocomplete="off"><span>€</span></div>
+    <label>MOTIVO DE LA DEUDA</label><input id="dm" maxlength="140" placeholder="Ej.: recibo de fibra devuelto de octubre">
+    ${empSel('dq', '¿QUIÉN LA ANOTA?')}
+    <div class="row" style="margin-top:16px"><button class="btn ghost" onclick="fichaCliente('${idCliente}')">Cancelar</button><button class="btn" id="dok">Anotar deuda</button></div>`);
+  setTimeout(() => $('#da').focus(), 150);
+  $('#dok').onclick = e => act(e.currentTarget, async () => {
+    const imp = $('#da').value.replace(',', '.');
+    if (!(parseFloat(imp) > 0)) throw new Error('Escribe el importe');
+    if (!$('#dm').value.trim()) throw new Error('Escribe el motivo de la deuda');
+    await call('crearDeuda', {idCliente, importe:imp, motivo:$('#dm').value, empleado:empVal('dq', 'anota la deuda')});
+    await loadAll(); fichaCliente(idCliente); toast('Deuda anotada', 'ok');
+  });
+}
+function pagarDeuda(id, idCliente) {
+  const x = (A.deudas || []).find(d => d.id === id); if (!x) return;
+  modal(`<div class="mh"><div class="ic big st-ok">✅</div><div><h3>Deuda pagada · ${eur(x.importe)}</h3><small class="mut">${esc(x.motivo)}</small></div></div>
+    ${empSel('dpq', '¿QUIÉN HA COBRADO LA DEUDA?')}
+    <label>FECHA DEL PAGO</label><input id="dpf" type="date" max="${today()}" value="${today()}">
+    <div class="row" style="margin-top:16px"><button class="btn ghost" onclick="fichaCliente('${idCliente}')">Cancelar</button><button class="btn ok" id="dpok">Marcar como pagada</button></div>`);
+  $('#dpok').onclick = e => act(e.currentTarget, async () => {
+    await call('pagarDeuda', {id, empleado:empVal('dpq', 'ha cobrado la deuda'), fechaPago:$('#dpf').value});
+    await loadAll(); fichaCliente(idCliente); toast('Deuda marcada como pagada', 'ok'); confetti(60);
+  });
+}
+function borrarDeuda(id, idCliente) {
+  if (!confirm('¿Anular esta deuda? Desaparecerá también para el cliente (úsalo solo si se anotó por error).')) return;
+  call('borrarDeuda', {id}).then(async () => { await loadAll(); fichaCliente(idCliente); toast('Deuda anulada', 'ok'); }).catch(e => toast(e.message, 'bad'));
+}
+function pagoDirectoModal(idCliente) {
+  const c = A.clients.find(x => x.id === idCliente); if (!c) return;
+  modal(`<div class="mh"><div class="ic big st-ok">🏢</div><div><h3>Pago directo a la compañía</h3><small class="mut">${esc(c.nombre)} · recibo devuelto que has pagado tú</small></div></div>
+    <p class="mut" style="font-size:13px;margin:8px 0 0">Queda en el historial como pago hecho, y el cliente lo verá en su app aunque no lo haya solicitado.</p>
+    <label>IMPORTE DEL RECIBO (€)</label><div class="money"><input id="pda" inputmode="decimal" placeholder="0,00" autocomplete="off"><span>€</span></div>
+    <label>FECHA DEL RECIBO DEVUELTO</label><input id="pdc" type="date" max="${today()}" value="${today()}">
+    <label>CONCEPTO</label><input id="pdo" maxlength="80" placeholder="Recibo devuelto · pagado a la compañía">
+    ${empSel('pdq', '¿QUIÉN HA HECHO EL PAGO?')}
+    <label>FECHA DEL PAGO</label><input id="pdf" type="date" max="${today()}" value="${today()}">
+    <div class="row" style="margin-top:16px"><button class="btn ghost" onclick="fichaCliente('${idCliente}')">Cancelar</button><button class="btn ok" id="pdok">Registrar pago</button></div>`);
+  setTimeout(() => $('#pda').focus(), 150);
+  $('#pdok').onclick = e => act(e.currentTarget, async () => {
+    const imp = $('#pda').value.replace(',', '.');
+    if (!(parseFloat(imp) > 0)) throw new Error('Escribe el importe');
+    await call('pagoDirecto', {idCliente, importe:imp, fechaCargo:$('#pdc').value, concepto:$('#pdo').value, empleado:empVal('pdq', 'ha hecho el pago'), fechaPago:$('#pdf').value});
+    await loadAll(); fichaCliente(idCliente); toast('Pago registrado', 'ok'); confetti(60);
+  });
+}
+
+/* — Notas privadas del cliente (solo admin) — */
+function notasCliente(id) {
+  const pintar = lista => {
+    const el = $('#ntl'); if (!el) return;
+    el.innerHTML = lista.length ? lista.map(n => `<div class="nota" data-id="${esc(n.id)}">
+        <div class="ntxt">${esc(n.texto)}</div>
+        <div class="nmeta"><small class="mut">${fdate(n.creada)}${n.actualizada && n.actualizada !== n.creada ? ' · editada ' + fdate(n.actualizada) : ''}${n.autor ? ' · ' + esc(n.autor) : ''}</small>
+          <span><button class="cp" title="Editar" data-ed="${esc(n.id)}">✏️</button> <button class="cp" title="Borrar" data-del="${esc(n.id)}">🗑️</button></span></div></div>`).join('')
+      : '<div class="mut" style="padding:10px 0;font-size:13px">Aún no hay notas de este cliente</div>';
+    el.querySelectorAll('[data-ed]').forEach(b => b.onclick = () => {
+      const n = lista.find(x => x.id === b.dataset.ed); const box = b.closest('.nota');
+      box.innerHTML = `<textarea rows="3" maxlength="2000">${esc(n.texto)}</textarea><div class="row" style="margin-top:8px"><button class="btn ghost sm">Cancelar</button><button class="btn sm">Guardar</button></div>`;
+      const [cancel, ok] = box.querySelectorAll('button');
+      cancel.onclick = () => pintar(lista);
+      ok.onclick = e => act(e.currentTarget, async () => pintar(await call('guardarNota', {idCliente:id, id:n.id, texto:box.querySelector('textarea').value})));
+    });
+    el.querySelectorAll('[data-del]').forEach(b => b.onclick = e => { if (confirm('¿Borrar esta nota?')) act(e.currentTarget, async () => pintar(await call('borrarNota', {idCliente:id, id:b.dataset.del}))); });
+  };
+  call('notas', {idCliente:id}).then(pintar).catch(e => { const el = $('#ntl'); if (el) el.innerHTML = `<div class="mut" style="font-size:13px">${esc(e.message)}</div>`; });
+  $('#ntok').onclick = e => act(e.currentTarget, async () => {
+    const t = $('#nt').value.trim(); if (!t) throw new Error('Escribe la nota');
+    pintar(await call('guardarNota', {idCliente:id, texto:t})); $('#nt').value = ''; toast('Nota guardada', 'ok');
+  });
+}
+
 /* — Historial — */
 function tabHi() {
   A.hf = A.hf || ''; A.hv = A.hv || 'pagos';
   if (A.hv === 'pagos') return tabPagos();
+  if (A.hv === 'deu') return tabDeudas();
   $('#tab').innerHTML = `<div class="glass">${hvSeg()}<div class="seg wrapseg" id="hf" style="margin-top:12px">${[['', 'Todas'], ['pendiente', '⏳ Pendientes'], ['pagada', '✅ Pagadas'], ['rechazada', '❌ Rechazadas'], ['cancelada', '⊘ Canceladas']].map(([k, l]) => `<button data-f="${k}" class="${A.hf === k ? 'on' : ''}">${l}</button>`).join('')}</div>
     <input id="hq" placeholder="Buscar por cliente, concepto, nº de solicitud, teléfono o cuenta…" style="margin-top:12px"><div id="hl" style="margin-top:6px"></div><div class="mut" id="hsum" style="text-align:right;font-size:13px;margin-top:8px"></div></div>`;
   const draw = () => {
@@ -1111,7 +1242,19 @@ function tabHi() {
   document.querySelectorAll('#hf button').forEach(b => b.onclick = () => { A.hf = b.dataset.f; document.querySelectorAll('#hf button').forEach(x => x.classList.toggle('on', x === b)); draw(); });
   $('#hq').oninput = draw; draw(); bindHv();
 }
-function hvSeg() { return `<div class="seg" id="hv"><button data-v="pagos" class="${A.hv === 'pagos' ? 'on' : ''}">💸 Pagos realizados</button><button data-v="sol" class="${A.hv === 'sol' ? 'on' : ''}">🧾 Solicitudes</button></div>`; }
+function hvSeg() { return `<div class="seg" id="hv"><button data-v="pagos" class="${A.hv === 'pagos' ? 'on' : ''}">💸 Pagos realizados</button><button data-v="sol" class="${A.hv === 'sol' ? 'on' : ''}">🧾 Solicitudes</button><button data-v="deu" class="${A.hv === 'deu' ? 'on' : ''}">📌 Deudas</button></div>`; }
+function tabDeudas() {
+  const all = (A.deudas || []);
+  $('#tab').innerHTML = `<div class="glass">${hvSeg()}<input id="dq2" placeholder="Buscar por cliente o motivo…" style="margin-top:12px"><div class="stats3" style="margin-top:12px" id="dsum"></div><div id="dl" style="margin-top:6px"></div></div>`;
+  const draw = () => {
+    const v = $('#dq2').value.trim().toLowerCase();
+    const r = all.filter(x => !v || (x.nombre + ' ' + x.motivo).toLowerCase().includes(v));
+    const pe = r.filter(x => x.estado === 'pendiente'), pa = r.filter(x => x.estado === 'pagada');
+    $('#dsum').innerHTML = `<div class="mini2"><b class="neg">${eur(suma(pe))}</b><small class="mut">pendiente</small></div><div class="mini2"><b class="pos">${eur(suma(pa))}</b><small class="mut">cobrado</small></div><div class="mini2"><b>${r.length}</b><small class="mut">deudas</small></div>`;
+    $('#dl').innerHTML = r.map(x => deudaRow(x, true).replace('<div class="mv sol deuda', `<div onclick="fichaCliente('${x.idCliente}')" style="cursor:pointer" class="mv sol deuda`)).join('') || '<div class="empty">Sin deudas</div>';
+  };
+  $('#dq2').oninput = draw; draw(); bindHv();
+}
 function bindHv() { document.querySelectorAll('#hv button').forEach(b => b.onclick = () => { A.hv = b.dataset.v; tabHi(); }); }
 function tabPagos() {
   const all = pagosDe(A.sol);
