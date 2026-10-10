@@ -255,6 +255,9 @@ select:focus{border-color:var(--a);box-shadow:0 0 0 4px rgba(236,72,153,.2)}
 .wait24 .clock{font-size:34px;animation:tick 2.4s ease-in-out infinite}
 @keyframes tick{0%,100%{transform:rotate(0)}40%,50%{transform:rotate(180deg)}90%{transform:rotate(360deg)}}
 .wait24 b{display:block;font-size:15px;margin-bottom:4px}.wait24 span{color:#e5e7eb;font-size:14px;line-height:1.45}.wait24 span b{display:inline;color:#fbbf24;font-size:inherit}
+.sc-top small b{display:inline;font-size:inherit}
+.aviso{margin-top:12px;padding:14px;border-radius:14px;background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.5);font-size:13px;line-height:1.5;color:#fde68a}
+.aviso b:first-child{display:block;font-size:15px;color:#fbbf24;margin-bottom:4px}.aviso b{color:#fff}
 
 </style>
 </head>
@@ -565,7 +568,7 @@ function authView(mode, email = '') {
   };
   $('#app').innerHTML = `<main class="auth">
     <section class="hero"><div class="brand" style="margin-bottom:26px"><img class="lg" src="icon-192.png" alt=""><span>${APP}</span></div>
-      <h2>Tus recibos, <em>bonificados</em>.</h2><p>Pide la devolución de tus facturas de fibra y móvil y recíbela por Bizum o transferencia. Sin papeleos.</p>${heroCard}</section>
+      <h2>Tus recibos, <em>bonificados</em>.</h2><p>Pide la devolución de tus facturas de fibra y móvil y recíbela de forma fácil, segura y sin papeleos.</p>${heroCard}</section>
     <div class="authcol"><div class="glass authbox"><img class="logo" src="icon-192.png" alt="">${forms[mode]}
       <div style="text-align:center;margin-top:10px"><button class="btn ghost inst" hidden onclick="install()" style="width:100%">⬇ Instalar la app</button></div></div>
       <button class="sharebtn" onclick="shareApp()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>Compartir app</button></div></main>`;
@@ -629,14 +632,15 @@ function pwModal() {
 
 /* ═════════ BONIFICACIONES: COMUNES ═════════ */
 const EST = {
-  pendiente:  {ico:'⏳', txt:'Pendiente de pago', cls:'st-pe'},
-  pagada:     {ico:'💸', txt:'Pagada · verificando', cls:'st-pa'},
-  completada: {ico:'✅', txt:'Pago completado', cls:'st-ok'},
+  pendiente:  {ico:'⏳', txt:'Pendiente · en espera de pago', cls:'st-pe'},
+  verificada: {ico:'🔎', txt:'Verificado · en espera de pago', cls:'st-pa'},
+  pagada:     {ico:'✅', txt:'Pagado', cls:'st-ok'},
   rechazada:  {ico:'❌', txt:'Rechazada', cls:'st-no'},
   cancelada:  {ico:'⊘', txt:'Cancelada', cls:'st-ca'},
 };
 const MET = {bizum:'📱 Bizum', transferencia:'🏦 Transferencia', efectivo:'💵 Efectivo'};
 const chip = e => `<span class="stc ${(EST[e] || {}).cls || ''}">${(EST[e] || {}).ico || ''} ${(EST[e] || {}).txt || e}</span>`;
+const quien = n => n && String(n).indexOf('@') < 0 ? String(n) : '';
 const maskIban = i => { const s = String(i || '').replace(/\s/g, ''); return s ? s.slice(0, 4) + ' •••• •••• ' + s.slice(-4) : '—'; };
 const today = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); };
 function copyTxt(t, what) { navigator.clipboard.writeText(String(t).replace(/\s/g, what === 'IBAN' ? ' ' : '')).then(() => toast('📋 ' + (what || 'Copiado') + ' copiado', 'ok')).catch(() => toast('No se pudo copiar', 'bad')); }
@@ -649,54 +653,55 @@ function countEur(el, from, to, ms = 1000) {
     if (k < 1) requestAnimationFrame(f);
   })(t0);
 }
-function timeline(s) {
+function timeline(s, admin) {
   const paso = (on, ico, t, sub) => `<div class="tl-s ${on ? 'on' : ''}"><i>${ico}</i><div><b>${t}</b><small>${sub || ''}</small></div></div>`;
   if (s.estado === 'rechazada' || s.estado === 'cancelada') return `<div class="tl">${paso(true, '📝', 'Solicitada', fdate(s.creada))}${paso(true, EST[s.estado].ico, EST[s.estado].txt, s.motivo ? esc(s.motivo) : fdate(s.actualizada))}</div>`;
+  const vq = admin && quien(s.verificadoPor) ? ' · por ' + esc(s.verificadoPor) : '', pq = admin && quien(s.pagadoPor) ? ' · por ' + esc(s.pagadoPor) : '';
   return `<div class="tl">${paso(true, '📝', 'Solicitada', fdate(s.creada))}
-    ${paso(s.estado !== 'pendiente', '💸', 'Pagada', s.fechaPago ? fday(s.fechaPago) + ' · ' + (MET[s.metodo] || '') : 'Esperando el pago')}
-    ${paso(s.estado === 'completada', '✅', 'Verificada', s.verificada ? fday(s.verificada) : 'Pendiente de verificar')}</div>`;
+    ${paso(s.estado !== 'pendiente', '🔎', 'Verificada', s.verificada ? fday(s.verificada) + vq : 'Estamos revisándola')}
+    ${paso(s.estado === 'pagada', '💸', 'Pagada', s.fechaPago ? fday(s.fechaPago) + ' · ' + (MET[s.metodo] || '') + pq : 'En espera de pago')}</div>`;
 }
 function loteInfo(s, lista) {
   if (!s.lote) return '';
   const l = lista.filter(x => x.lote === s.lote), t = suma(l);
-  return `<div class="box"><b>${l.length > 1 ? '🧾 Pago conjunto de ' + l.length + ' recibos' : '🧾 Detalle del pago'}</b>${l.length > 1 ? filasRecibos(l) : ''}${desglose(t, s.lineas, s.descuento, s.neto)}</div>`;
+  return `<div class="box"><b>${l.length > 1 ? '🧾 Grupo de ' + l.length + ' recibos' : '🧾 Detalle'}</b>${l.length > 1 ? filasRecibos(l) : ''}${desglose(t, s.lineas, s.descuento, s.neto, s.estado === 'pagada' ? 'Total pagado' : 'Total a pagar')}</div>`;
 }
-/* historial de pagos: cada pago = un lote (o una solicitud suelta) */
+/* historial de pagos (archivo): cada pago = un grupo (lote) */
 function pagosDe(lista) {
   const g = {};
-  lista.filter(s => s.estado === 'pagada' || s.estado === 'completada').forEach(s => { const k = s.lote || s.id; (g[k] = g[k] || []).push(s); });
+  lista.filter(s => s.estado === 'pagada').forEach(s => { const k = s.lote || s.id; (g[k] = g[k] || []).push(s); });
   return Object.values(g).map(l => {
     const c = l[0], total = Math.round(l.reduce((x, s) => x + s.importe, 0) * 100) / 100;
-    return {k: c.lote || c.id, nombre: c.nombre, idCliente: c.idCliente, fecha: c.fechaPago, metodo: c.metodo, items: l, total, quien: c.pagadoPor && c.pagadoPor.indexOf('@') < 0 ? c.pagadoPor : '',
-      lineas: c.lote ? c.lineas : 0, descuento: c.lote ? c.descuento : 0, neto: c.lote ? c.neto : total, ok: l.every(s => s.estado === 'completada')};
+    return {k: c.lote || c.id, nombre: c.nombre, idCliente: c.idCliente, fecha: c.fechaPago, metodo: c.metodo, items: l, total, quien: quien(c.pagadoPor), verif: quien(c.verificadoPor),
+      lineas: c.lote ? c.lineas : 0, descuento: c.lote ? c.descuento : 0, neto: c.lote ? c.neto : total};
   }).sort((x, y) => new Date(y.fecha) - new Date(x.fecha));
 }
 function pagoRow(p, admin) {
   P_[p.k] = p;
-  return `<div class="mv sol" onclick="pagoModal('${p.k}', ${admin ? 1 : 0})"><div class="ic ${p.ok ? 'st-ok' : 'st-pa'}">💸</div>
-    <div class="t"><b>${admin ? esc(p.nombre) : (MET[p.metodo] || 'Pago')}</b><small>${fday(p.fecha)} · ${p.items.length} recibo${p.items.length > 1 ? 's' : ''}${p.lineas ? ' · −' + eur(p.descuento) + ' líneas' : ''}${admin ? ' · ' + (MET[p.metodo] || '') + (p.quien ? ' · 👤 ' + esc(p.quien) : '') : ''} · ${p.ok ? chip('completada') : chip('pagada')}</small></div>
+  return `<div class="mv sol" onclick="pagoModal('${p.k}', ${admin ? 1 : 0})"><div class="ic st-ok">💸</div>
+    <div class="t"><b>${admin ? esc(p.nombre) : (MET[p.metodo] || 'Pago')}</b><small>${fday(p.fecha)} · ${p.items.length} recibo${p.items.length > 1 ? 's' : ''}${p.lineas ? ' · −' + eur(p.descuento) + ' líneas' : ''}${admin ? ' · ' + (MET[p.metodo] || '') + (p.quien ? ' · 👤 ' + esc(p.quien) : '') : ''}</small></div>
     <div class="pts pos">${eur(p.neto)}<small>${p.items.length > 1 ? 'de ' + eur(p.total) : ''}</small></div></div>`;
 }
 const P_ = {};
 function pagoModal(k, admin) {
   const p = P_[k]; if (!p) return;
-  modal(`<div class="mh"><div class="ic big ${p.ok ? 'st-ok' : 'st-pa'}">💸</div><div><h3>${eur(p.neto)}${admin ? ' · ' + esc(p.nombre) : ''}</h3><small class="mut">${MET[p.metodo] || ''} · pagado el ${fday(p.fecha)}${admin && p.quien ? ' por ' + esc(p.quien) : ''}</small></div></div>
+  modal(`<div class="mh"><div class="ic big st-ok">💸</div><div><h3>${eur(p.neto)}${admin ? ' · ' + esc(p.nombre) : ''}</h3><small class="mut">${MET[p.metodo] || ''} · pagado el ${fday(p.fecha)}</small></div></div>
     <div class="box"><b>🧾 Recibos incluidos</b>${filasRecibos(p.items)}${desglose(p.total, p.lineas, p.descuento, p.neto)}</div>
-    <div class="kv" style="margin-top:10px"><span>Estado</span>${p.ok ? chip('completada') : chip('pagada')}</div>
+    ${admin ? `<div class="kv" style="margin-top:8px"><span>Verificado por</span><b>${esc(p.verif || '—')}</b></div><div class="kv"><span>Pagado por</span><b>${esc(p.quien || '—')}</b></div>` : ''}
+    <div class="kv"><span>Estado</span>${chip('pagada')}</div>
     ${admin ? `<button class="btn ghost big" style="margin-top:10px" onclick="closeModal();fichaCliente('${p.idCliente}')">👤 Ver ficha del cliente</button>` : ''}
     <button class="btn big" style="margin-top:10px" onclick="closeModal()">Cerrar</button>`);
 }
 function piggySvg(cls) {
   return `<svg class="${cls || 'pig'}" viewBox="0 0 512 512" aria-hidden="true"><g transform="translate(256 256) scale(.94) translate(-246 -270)">${PIG}</g></svg>`;
 }
-
 /* ═════════ CLIENTE ═════════ */
 function solRow(s, admin) {
   return `<div class="mv sol" onclick="${admin ? `solModalAdmin('${s.id}')` : `solModal('${s.id}')`}">
     <div class="ic ${(EST[s.estado] || {}).cls}">${(EST[s.estado] || {}).ico}</div>
     <div class="t"><b>${admin ? esc(s.nombre) : esc(s.concepto || 'Bonificación de recibo')}</b>
       <small>${admin ? (s.concepto ? esc(s.concepto) + ' · ' : '') : ''}Cargo del ${fday(s.fechaCargo)} · ${chip(s.estado)}</small></div>
-    <div class="pts ${s.estado === 'completada' ? 'pos' : s.estado === 'rechazada' || s.estado === 'cancelada' ? 'off2' : ''}">${eur(s.importe)}<small>${s.id}</small></div></div>`;
+    <div class="pts ${s.estado === 'pagada' ? 'pos' : s.estado === 'rechazada' || s.estado === 'cancelada' ? 'off2' : ''}">${eur(s.importe)}<small>${s.id}</small></div></div>`;
 }
 function clientView(d) {
   S.user = d.user; S.sol = d.solicitudes; S.res = d.resumen;
@@ -714,15 +719,17 @@ function clientView(d) {
       <div class="glass"><h3 style="margin-bottom:10px">💳 Tus datos de cobro</h3>
         <div class="dato"><span>🏦</span><div><small class="mut">Cuenta de cobros (IBAN)</small><b class="mono">${esc(u.iban)}</b></div>${copyBtn(u.iban, 'IBAN')}</div>
         <div class="dato"><span>📱</span><div><small class="mut">Móvil para tus Bizum</small><b class="mono">${esc(u.telefono)}</b></div>${copyBtn(u.telefono, 'Teléfono')}</div>
-        <p class="mut" style="font-size:12px;margin:10px 0 0">¿Ha cambiado tu cuenta o tu móvil? Avísanos en tienda y lo actualizamos.</p></div>
+        <button class="btn ghost" style="width:100%;margin-top:10px" onclick="cambiarIbanModal()">✏️ Cambiar cuenta bancaria</button>
+        <p class="mut" style="font-size:12px;margin:10px 0 0">¿Has cambiado de móvil? Avísanos en tienda y lo actualizamos.</p></div>
     </section>
     <section class="stack">
       <div class="stats3">
         <div class="glass mini"><span>⏳</span><b id="kpe">${d.resumen.pendientes}</b><small class="mut">pendientes</small></div>
         <div class="glass mini"><span>🚀</span><b id="kca">${eur(d.resumen.enCamino)}</b><small class="mut">en camino</small></div>
         <div class="glass mini"><span>🧾</span><b id="kto">${d.resumen.total}</b><small class="mut">solicitudes</small></div></div>
-      <div class="glass"><h3 style="margin-bottom:6px">Mis solicitudes</h3><div id="movs"></div></div>
+      <div class="glass"><h3 style="margin-bottom:6px">⏳ En espera de pago</h3><div id="movs"></div></div>
       <div class="glass" id="pagosBox" hidden><h3 style="margin-bottom:6px">💸 Pagos recibidos</h3><div id="pagos"></div></div>
+      <details class="glass" id="archBox" hidden><summary style="cursor:pointer;font-weight:700">📦 Archivo de solicitudes <span class="mut" id="archN"></span></summary><div id="arch" style="margin-top:6px"></div></details>
       <div class="glass"><b>¿Cómo funciona?</b><ol class="how">
         <li>Cuando te cobren el recibo de tu fibra o tu móvil, pulsa <b>Solicitar bonificación</b>.</li>
         <li>Indica el <b>importe</b> y la <b>fecha del cargo</b> en tu cuenta.</li>
@@ -745,10 +752,9 @@ function clientView(d) {
       n.solicitudes.forEach(s => {
         const a = antes[s.id];
         if (a && a !== s.estado) {
-          if (s.estado === 'pagada') toast('💸 ¡Te hemos pagado ' + eur(s.importe) + ' por ' + (MET[s.metodo] || 'pago') + '!', 'ok');
-          if (s.estado === 'completada') { fiesta = true; toast('✅ Pago de ' + eur(s.importe) + ' completado', 'ok'); }
+          if (s.estado === 'verificada') toast('🔎 Hemos verificado tu solicitud de ' + eur(s.importe) + '. ¡Pronto recibirás el pago!', 'ok');
+          if (s.estado === 'pagada') { fiesta = true; toast('💸 ¡Te hemos pagado! ' + (MET[s.metodo] || ''), 'ok'); }
           if (s.estado === 'rechazada') toast('❌ Solicitud de ' + eur(s.importe) + ' rechazada', 'bad');
-          if (s.estado === 'pagada' && a === 'pendiente') fiesta = true;
         }
       });
       if (JSON.stringify(n.solicitudes) !== JSON.stringify(S.sol)) {
@@ -764,7 +770,9 @@ function drawClient() {
   $('#eur').innerHTML = r.enCamino > 0 ? '🚀 ' + eur(r.enCamino) + ' en camino' : r.total ? 'Todo al día ✨' : 'Pide tu primera bonificación';
   $('#kpe').textContent = r.pendientes; $('#kca').textContent = eur(r.enCamino); $('#kto').textContent = r.total;
   const pg = pagosDe(S.sol); $('#pagosBox').hidden = !pg.length; $('#pagos').innerHTML = pg.map(p => pagoRow(p)).join('');
-  $('#movs').innerHTML = S.sol.length ? S.sol.map(s => solRow(s)).join('') : `<div class="empty">${piggySvg('pig-empty')}<br>Aún no has pedido ninguna bonificación.<br><b style="color:#fff">¡Pide la primera!</b></div>`;
+  const act_ = S.sol.filter(s => s.estado === 'pendiente' || s.estado === 'verificada'), arch = S.sol.filter(s => !(s.estado === 'pendiente' || s.estado === 'verificada'));
+  $('#movs').innerHTML = act_.length ? act_.map(s => solRow(s)).join('') : S.sol.length ? '<div class="empty">✨ No tienes nada pendiente. ¡Todo pagado!</div>' : `<div class="empty">${piggySvg('pig-empty')}<br>Aún no has pedido ninguna bonificación.<br><b style="color:#fff">¡Pide la primera!</b></div>`;
+  $('#archBox').hidden = !arch.length; $('#archN').textContent = '(' + arch.length + ')'; $('#arch').innerHTML = arch.map(s => solRow(s)).join('');
 }
 function askModal() {
   const u = S.user;
@@ -783,7 +791,7 @@ function askModal() {
     closeModal(); S.sol.unshift(s); S.res.pendientes++; S.res.total++; S.res.enCamino = Math.round((S.res.enCamino + s.importe) * 100) / 100;
     drawClient(); confetti(80);
     modal(`<div style="text-align:center">${piggySvg('pig-big')}<h3>¡Solicitud enviada! 🎉</h3><p class="mut">Hemos recibido tu petición de <b style="color:#fff">${eur(s.importe)}</b>.</p>
-      <div class="wait24"><div class="clock">⏳</div><div><b>Ten un poquito de paciencia</b><span>En un plazo máximo de <b>24 horas</b> recibirás tu bonificación por Bizum o transferencia. Te avisaremos aquí en cuanto la tengas 💸</span></div></div>
+      <div class="wait24"><div class="clock">⏳</div><div><b>Ten un poquito de paciencia</b><span>Estamos revisando tu solicitud. Te avisaremos aquí en cuanto esté verificada y te hayamos pagado 💸</span></div></div>
       <button class="btn big" style="margin-top:8px" onclick="closeModal()">Genial</button></div>`);
   });
 }
@@ -796,6 +804,21 @@ function solModal(id) {
     <div class="row" style="margin-top:16px">${s.estado === 'pendiente' ? '<button class="btn ghost" id="scx">Cancelar solicitud</button>' : ''}<button class="btn" onclick="closeModal()">Cerrar</button></div>`);
   const x = $('#scx'); if (x) x.onclick = e => { if (confirm('¿Cancelar esta solicitud de ' + eur(s.importe) + '?')) act(e.currentTarget, async () => {
     const n = await call('cancelar', {id}); Object.assign(s, n); S.res.pendientes--; S.res.enCamino = Math.round((S.res.enCamino - s.importe) * 100) / 100; closeModal(); drawClient(); toast('Solicitud cancelada', 'ok'); }); };
+}
+
+function cambiarIbanModal() {
+  modal(`<div class="mh"><div class="ic big">🏦</div><div><h3>Cambiar cuenta bancaria</h3><small class="mut">Ahora: ${esc(S.user.iban)}</small></div></div>
+    <div class="aviso"><b>⚠️ Muy importante</b>La cuenta tiene que ser <b>siempre la cuenta donde te cobran los recibos de tu fibra o tu móvil</b>. Comprobamos cada solicitud con los cargos de esa cuenta: si pones otra, no podremos bonificarte.</div>
+    <label>NUEVO IBAN</label>${ibanField('ni')}
+    <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;font-size:13px;letter-spacing:0;margin-top:14px;color:#fff"><input type="checkbox" id="nc" style="width:auto;margin:2px 0 0;accent-color:#ec4899;transform:scale(1.2)"> Confirmo que es la cuenta donde me cobran los recibos de fibra o móvil.</label>
+    <label>TU CONTRASEÑA (para confirmar)</label><input id="np" type="password" autocomplete="current-password">
+    <div class="row" style="margin-top:16px"><button class="btn ghost" onclick="closeModal()">Cancelar</button><button class="btn" id="nok">Guardar cuenta</button></div>`);
+  $('#nok').onclick = e => act(e.currentTarget, async () => {
+    if (!ibanValido($('#ni').value)) throw new Error('El IBAN no es correcto. Revisa los números.');
+    if (!$('#nc').checked) throw new Error('Confirma que es la cuenta donde te cobran los recibos');
+    const u = await call('cambiarIban', {iban:$('#ni').value, confirmo:true, password:$('#np').value});
+    S.user = u; closeModal(); toast('🏦 Cuenta actualizada', 'ok'); clientView({user:u, solicitudes:S.sol, resumen:S.res});
+  });
 }
 
 /* lluvia de monedas */
@@ -828,7 +851,7 @@ async function loadAll() {
   if (!A.descLinea) call('stats').then(st => { A.descLinea = st.config.descLinea; }).catch(() => {});
 }
 function navBadges() {
-  const n = A.sol.filter(s => s.estado === 'pendiente' || s.estado === 'pagada').length;
+  const n = A.sol.filter(s => s.estado === 'pendiente' || s.estado === 'verificada').length;
   const b = document.querySelector('#nav [data-k="pe"] em'); if (b) { b.textContent = n; b.hidden = !n; }
 }
 function tab(t) {
@@ -852,23 +875,23 @@ function filasRecibos(l, check) {
     <span class="rf">📅 ${fday(s.fechaCargo)}</span><span class="rc">${esc(s.concepto || s.id)}</span><b>${eur(s.importe)}</b></label>`).join('')}</div>`;
 }
 function grupoPendiente(l) {
-  const c = l[0], ids = l.map(s => s.id).join(',');
+  const c = l[0];
   return `<div class="glass scard st-pe" id="g_${c.idCliente}">
-    <div class="sc-top"><div><b>${esc(c.nombre)}</b><small class="mut">${l.length} recibo${l.length > 1 ? 's' : ''} por pagar · el último pedido ${fdate(l[l.length - 1].creada)}</small></div><div class="sc-imp">${eur(suma(l))}</div></div>
+    <div class="sc-top"><div><b>${esc(c.nombre)}</b><small class="mut">${l.length} recibo${l.length > 1 ? 's' : ''} por revisar · el último pedido ${fdate(l[l.length - 1].creada)}</small></div><div class="sc-imp">${eur(suma(l))}</div></div>
     ${filasRecibos(l)}
     ${datosCobro(c)}
-    <div class="row" style="margin-top:12px"><button class="btn ghost" onclick="rechazarDe('${c.idCliente}')">❌ Rechazar…</button><button class="btn" onclick="pagarGrupo('${c.idCliente}')">💸 Revisar y pagar${l.length > 1 ? ' (' + l.length + ')' : ''}</button></div></div>`;
+    <div class="row" style="margin-top:12px"><button class="btn ghost" onclick="rechazarDe('${c.idCliente}')">❌ Rechazar…</button><button class="btn" onclick="revisarGrupo('${c.idCliente}')">🔎 Revisar${l.length > 1 ? ' (' + l.length + ')' : ''}</button></div></div>`;
 }
-function desglose(t, lin, desc, neto) {
-  return `<div class="dsg"><div><span>Suma de recibos</span><b>${eur(t)}</b></div>${lin ? `<div class="neg"><span>− ${lin} línea${lin > 1 ? 's' : ''} × ${eur(desc / lin)}</span><b>− ${eur(desc)}</b></div>` : ''}<div class="tot"><span>Total</span><b>${eur(neto)}</b></div></div>`;
+function desglose(t, lin, desc, neto, lbl) {
+  return `<div class="dsg"><div><span>Suma de recibos</span><b>${eur(t)}</b></div>${lin ? `<div class="neg"><span>− ${lin} línea${lin > 1 ? 's' : ''} × ${eur(desc / lin)}</span><b>− ${eur(desc)}</b></div>` : ''}<div class="tot"><span>${lbl || 'Total'}</span><b>${eur(neto)}</b></div></div>`;
 }
-function grupoPagado(l) {
+function grupoVerificado(l) {
   const c = l[0];
-  const neto = c.lote ? c.neto : suma(l), desc = c.lote ? c.descuento : 0, lin = c.lote ? c.lineas : 0;
-  return `<div class="glass scard st-pa" id="p_${c.lote || c.id}">
-    <div class="sc-top"><div><b>${esc(c.nombre)}</b><small class="mut">${MET[c.metodo] || ''} · pagado el ${fday(c.fechaPago)}${c.pagadoPor && c.pagadoPor.indexOf('@') < 0 ? ' por <b style="color:#fff">' + esc(c.pagadoPor) + '</b>' : ''}${l.length > 1 ? ' · pago conjunto de ' + l.length + ' recibos' : ''}</small></div><div class="sc-imp">${eur(neto)}</div></div>
-    ${filasRecibos(l)}${desglose(suma(l), lin, desc, neto)}
-    <div class="row" style="margin-top:12px"><button class="btn ghost" onclick="reabrir('${c.id}')">↩ Deshacer pago</button><button class="btn ok" onclick="verificarGrupo('${l.map(s => s.id).join(',')}', this)">✅ Verificar${l.length > 1 ? ' todo (' + l.length + ')' : ''}</button></div></div>`;
+  return `<div class="glass scard st-pa" id="v_${c.lote}">
+    <div class="sc-top"><div><b>${esc(c.nombre)}</b><small class="mut">🔎 Verificado el ${fday(c.verificada)}${quien(c.verificadoPor) ? ' por <b style="color:#fff">' + esc(c.verificadoPor) + '</b>' : ''}${l.length > 1 ? ' · ' + l.length + ' recibos' : ''}</small></div><div class="sc-imp">${eur(c.neto)}</div></div>
+    ${filasRecibos(l)}${desglose(suma(l), c.lineas, c.descuento, c.neto, 'Total a pagar')}
+    ${datosCobro(c)}
+    <div class="row" style="margin-top:12px"><button class="btn ghost" onclick="reabrir('${c.id}')">↩ Deshacer</button><button class="btn ok" onclick="pagarVerificado('${c.lote}')">💸 Marcar pagado</button></div></div>`;
 }
 /* escáner del QR del cliente */
 function scanModal() {
@@ -884,80 +907,111 @@ function scanModal() {
 }
 function stopScan() { const s = S.scanner; S.scanner = null; if (s) s.stop().then(() => s.clear()).catch(() => {}); }
 function tabPe() {
-  const pe = A.sol.filter(s => s.estado === 'pendiente').reverse(), pa = A.sol.filter(s => s.estado === 'pagada');
-  const gpe = grupos(pe, s => s.idCliente), gpa = grupos(pa, s => s.lote || s.id);
-  const netoPa = gpa.reduce((a, l) => a + (l[0].lote ? l[0].neto : suma(l)), 0);
+  const pe = A.sol.filter(s => s.estado === 'pendiente').reverse(), ve = A.sol.filter(s => s.estado === 'verificada');
+  const gpe = grupos(pe, s => s.idCliente), gve = grupos(ve, s => s.lote || s.id);
+  const netoVe = gve.reduce((a, l) => a + (l[0].neto ?? suma(l)), 0);
   $('#tab').innerHTML = `<div class="stack">
-    <div class="stats"><div class="glass stat"><span class="mut">⏳ Por pagar</span><b class="amb">${eur(suma(pe))}</b><small class="mut">${pe.length} recibos de ${gpe.length} cliente${gpe.length === 1 ? '' : 's'}</small></div>
-      <div class="glass stat"><span class="mut">💸 Pagado, por verificar</span><b class="blu">${eur(netoPa)}</b><small class="mut">${gpa.length} pago${gpa.length === 1 ? '' : 's'}</small></div></div>
+    <div class="stats"><div class="glass stat"><span class="mut">⏳ Por revisar</span><b class="amb">${eur(suma(pe))}</b><small class="mut">${pe.length} recibos de ${gpe.length} cliente${gpe.length === 1 ? '' : 's'}</small></div>
+      <div class="glass stat"><span class="mut">🔎 Verificado, por pagar</span><b class="blu">${eur(netoVe)}</b><small class="mut">${gve.length} pago${gve.length === 1 ? '' : 's'} pendiente${gve.length === 1 ? '' : 's'}</small></div></div>
     <button class="btn ghost big" onclick="scanModal()">📷 Escanear QR de un cliente</button>
-    <h3 class="sec">⏳ Pendientes de pago <small class="mut" style="font-weight:500">· agrupados por cliente</small></h3>
-    <div class="cards">${gpe.length ? gpe.map(grupoPendiente).join('') : '<div class="glass empty">🎉 No hay nada pendiente de pago</div>'}</div>
-    <h3 class="sec">💸 Pagadas, pendientes de verificar</h3>
-    <div class="cards">${gpa.length ? gpa.map(grupoPagado).join('') : '<div class="glass empty">Nada por verificar</div>'}</div></div>`;
+    <h3 class="sec">⏳ Pendientes de revisar <small class="mut" style="font-weight:500">· agrupados por cliente</small></h3>
+    <div class="cards">${gpe.length ? gpe.map(grupoPendiente).join('') : '<div class="glass empty">🎉 No hay nada por revisar</div>'}</div>
+    <h3 class="sec">🔎 Verificados, en espera de pago</h3>
+    <div class="cards">${gve.length ? gve.map(grupoVerificado).join('') : '<div class="glass empty">No hay pagos pendientes</div>'}</div></div>`;
 }
 function upd(s) { const i = A.sol.findIndex(x => x.id === s.id); if (i >= 0) A.sol[i] = Object.assign(A.sol[i], s); navBadges(); }
 function refreshTab() { closeModal(); tab(A.tab); }
-function pagarModal(id) { const s = A.sol.find(x => x.id === id); if (s) pagarGrupo(s.idCliente, [id]); }
-function pagarGrupo(idCliente, soloIds) {
+function empSel(id, label, val) {
+  return `<label>${label}</label>` + ((A.emps || []).length
+    ? `<select id="${id}"><option value="">— Elige el empleado —</option>${A.emps.map(n => `<option${n === (val || A.lastEmp) ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select>`
+    : `<div class="mut" style="font-size:13px">No hay empleados dados de alta. <button class="link" onclick="closeModal();tab('st')">Añádelos en Ajustes</button></div>`);
+}
+function empVal(id, que) {
+  const v = $('#' + id) ? $('#' + id).value : '';
+  if ((A.emps || []).length && !v) throw new Error('Elige qué empleado ' + que);
+  if (v) A.lastEmp = v; return v;
+}
+function pagoCampos(c) {
+  return `<label>¿CÓMO SE HA PAGADO?</label><div class="seg" id="pm">${Object.keys(MET).map((k, i) => `<button class="${i === 0 ? 'on' : ''}" data-m="${k}">${MET[k]}</button>`).join('')}</div>
+    ${empSel('pq', '¿QUIÉN HA HECHO EL PAGO?')}
+    <label>FECHA DEL PAGO</label><input id="pf" type="date" max="${today()}" value="${today()}">
+    <div class="box" style="font-size:13px" id="pinfo"></div>`;
+}
+function bindPago(c, getNeto) {
+  let m = 'bizum';
+  const info = () => { const n = Math.max(0, getNeto()); $('#pinfo').innerHTML = (m === 'bizum' ? '📱 Bizum al <b class="mono">' + esc(c.telefono) + '</b> ' + copyBtn(c.telefono, 'Teléfono') : m === 'transferencia' ? '🏦 Transferencia a <b class="mono">' + esc(c.iban) + '</b> ' + copyBtn(c.iban, 'IBAN') : '💵 Pago en efectivo en tienda')
+    + '<br>Importe: <b>' + eur(n) + '</b> ' + copyBtn(n.toFixed(2).replace('.', ','), 'Importe'); };
+  document.querySelectorAll('#pm button').forEach(b => b.onclick = () => { document.querySelectorAll('#pm button').forEach(x => x.classList.remove('on')); b.classList.add('on'); m = b.dataset.m; info(); });
+  info(); return { metodo: () => m, info };
+}
+/* PASO 1: revisar y verificar (opcionalmente pagar a la vez) */
+function revisarGrupo(idCliente, soloIds) {
   const l = A.sol.filter(s => s.estado === 'pendiente' && s.idCliente === idCliente && (!soloIds || soloIds.indexOf(s.id) >= 0)).reverse();
   if (!l.length) return; const c = l[0], dl = A.descLinea || 3;
-  modal(`<div class="mh"><div class="ic big st-pe">💸</div><div><h3>Revisar y pagar</h3><small class="mut">${esc(c.nombre)} · ${l.length} recibo${l.length > 1 ? 's' : ''}</small></div></div>
-    <p class="mut" style="font-size:13px;margin:6px 0 0">Comprueba cada cargo con los movimientos de su cuenta. Desmarca el que no quieras pagar ahora.</p>
+  modal(`<div class="mh"><div class="ic big st-pe">🔎</div><div><h3>Revisar solicitudes</h3><small class="mut">${esc(c.nombre)} · ${l.length} recibo${l.length > 1 ? 's' : ''}</small></div></div>
+    <p class="mut" style="font-size:13px;margin:6px 0 0">Comprueba cada cargo con los movimientos de su cuenta (${maskIban(c.iban)}). Desmarca el que no esté bien.</p>
     ${filasRecibos(l, true)}
     <div class="box"><b>📱 ¿El cliente tiene líneas móviles contratadas?</b>
       <p class="mut" style="font-size:12px;margin:4px 0 8px">Las líneas no se bonifican: se descuentan ${eur(dl)} por línea.</p>
       <div class="seg" id="ql"><button data-v="no" class="on">No</button><button data-v="si">Sí</button></div>
       <div id="qn" hidden><label>¿CUÁNTAS LÍNEAS?</label><div class="stepper"><button type="button" id="lm">−</button><input id="ln" inputmode="numeric" value="1"><button type="button" id="lp">＋</button></div></div></div>
     <div id="dsg"></div>
-    <label>¿CÓMO SE HA PAGADO?</label><div class="seg" id="pm">${Object.keys(MET).map((k, i) => `<button class="${i === 0 ? 'on' : ''}" data-m="${k}">${MET[k]}</button>`).join('')}</div>
-    <label>¿QUIÉN HA HECHO EL PAGO?</label>${(A.emps || []).length
-      ? `<select id="pq"><option value="">— Elige el empleado —</option>${A.emps.map(n => `<option${n === A.lastEmp ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select>`
-      : `<div class="mut" style="font-size:13px">No hay empleados dados de alta. <button class="link" onclick="closeModal();tab('st')">Añádelos en Ajustes</button></div>`}
-    <label>FECHA DEL PAGO</label><input id="pf" type="date" max="${today()}" value="${today()}">
-    <div class="box" style="font-size:13px" id="pinfo"></div>
-    <div class="row" style="margin-top:16px"><button class="btn ghost" onclick="closeModal()">Cancelar</button><button class="btn" id="pok">Confirmar pago</button></div>`);
-  let m = 'bizum', tiene = false;
+    ${empSel('qv', '¿QUIÉN LO HA VERIFICADO?')}
+    <div class="box"><b>💸 ¿Ya está pagado?</b><div class="seg" id="yp" style="margin-top:8px"><button data-v="no" class="on">No, solo verificar</button><button data-v="si">Sí, ya está pagado</button></div>
+      <div id="ypf" hidden>${pagoCampos(c)}</div></div>
+    <div class="row" style="margin-top:16px"><button class="btn ghost" onclick="closeModal()">Cancelar</button><button class="btn" id="pok">Verificar</button></div>`);
+  let tiene = false, pagado = false;
   const sel = () => [...document.querySelectorAll('.rck')].filter(x => x.checked).map(x => x.value);
-  const calc = () => {
+  const vals = () => {
     const ids = sel(), t = suma(l.filter(s => ids.indexOf(s.id) >= 0));
     const lin = tiene ? Math.max(0, parseInt($('#ln').value) || 0) : 0, desc = Math.round(lin * dl * 100) / 100, neto = Math.round((t - desc) * 100) / 100;
-    $('#dsg').innerHTML = desglose(t, lin, desc, neto) + (neto < 0 ? '<p style="color:var(--bad);font-size:13px">⚠ El descuento supera la suma de los recibos</p>' : '');
-    $('#pok').textContent = ids.length ? 'Confirmar pago de ' + eur(Math.max(0, neto)) : 'Marca algún recibo';
+    return {ids, t, lin, desc, neto};
+  };
+  const calc = () => {
+    const {ids, t, lin, desc, neto} = vals();
+    $('#dsg').innerHTML = desglose(t, lin, desc, neto, 'Total a pagar') + (neto < 0 ? '<p style="color:var(--bad);font-size:13px">⚠ El descuento supera la suma de los recibos</p>' : '');
+    $('#pok').textContent = !ids.length ? 'Marca algún recibo' : pagado ? '💸 Verificar y marcar pagado (' + eur(Math.max(0, neto)) + ')' : '🔎 Verificar ' + eur(Math.max(0, neto));
     $('#pok').disabled = !ids.length || neto < 0;
-    $('#pinfo').innerHTML = (m === 'bizum' ? '📱 Bizum al <b class="mono">' + esc(c.telefono) + '</b> ' + copyBtn(c.telefono, 'Teléfono') : m === 'transferencia' ? '🏦 Transferencia a <b class="mono">' + esc(c.iban) + '</b> ' + copyBtn(c.iban, 'IBAN') : '💵 Pago en efectivo en tienda')
-      + '<br>Importe: <b>' + eur(Math.max(0, neto)) + '</b> ' + copyBtn(Math.max(0, neto).toFixed(2).replace('.', ','), 'Importe');
+    if (P) P.info();
     return {ids, lin, neto};
   };
+  let P = null;
   document.querySelectorAll('.rck').forEach(x => x.onchange = calc);
   document.querySelectorAll('#ql button').forEach(b => b.onclick = () => { document.querySelectorAll('#ql button').forEach(x => x.classList.toggle('on', x === b)); tiene = b.dataset.v === 'si'; $('#qn').hidden = !tiene; calc(); if (tiene) $('#ln').focus(); });
+  document.querySelectorAll('#yp button').forEach(b => b.onclick = () => { document.querySelectorAll('#yp button').forEach(x => x.classList.toggle('on', x === b)); pagado = b.dataset.v === 'si'; $('#ypf').hidden = !pagado; calc(); });
   $('#ln').oninput = calc;
   $('#lm').onclick = () => { $('#ln').value = Math.max(1, (parseInt($('#ln').value) || 1) - 1); calc(); };
   $('#lp').onclick = () => { $('#ln').value = (parseInt($('#ln').value) || 0) + 1; calc(); };
-  document.querySelectorAll('#pm button').forEach(b => b.onclick = () => { document.querySelectorAll('#pm button').forEach(x => x.classList.remove('on')); b.classList.add('on'); m = b.dataset.m; calc(); });
+  P = bindPago(c, () => vals().neto);
   calc();
   $('#pok').onclick = e => act(e.currentTarget, async () => {
-    const {ids, lin, neto} = calc();
+    const {ids, lin} = vals();
     if (tiene && !(lin > 0)) throw new Error('Indica cuántas líneas tiene');
-    const emp = $('#pq') ? $('#pq').value : '';
-    if ((A.emps || []).length && !emp) throw new Error('Elige qué empleado ha hecho el pago');
-    A.lastEmp = emp;
-    const r = await call('pagarLote', {ids, lineas:lin, metodo:m, fechaPago:$('#pf').value, empleado:emp});
-    r.solicitudes.forEach(upd); refreshTab(); toast('💸 Pago de ' + eur(r.neto) + ' registrado', 'ok'); coinRain(16);
+    const verif = empVal('qv', 'ha verificado las solicitudes');
+    if (pagado) {
+      const emp = empVal('pq', 'ha hecho el pago');
+      const r = await call('pagarLote', {ids, lineas:lin, metodo:P.metodo(), fechaPago:$('#pf').value, empleado:emp, verificadoPor:verif});
+      r.solicitudes.forEach(upd); refreshTab(); toast('💸 Pago de ' + eur(r.neto) + ' registrado y archivado', 'ok'); coinRain(16); confetti(80);
+    } else {
+      const r = await call('verificarLote', {ids, lineas:lin, empleado:verif});
+      r.solicitudes.forEach(upd); refreshTab(); toast('🔎 Verificado: ' + eur(r.neto) + ' en espera de pago', 'ok');
+    }
   });
 }
-async function verificarGrupo(idsTxt, btn) {
-  const ids = idsTxt.split(',');
-  await act(btn, async () => {
-    const r = await call('verificarLote', {ids}); r.solicitudes.forEach(upd);
-    const card = btn.closest('.scard'); if (card) card.classList.add('bye');
-    setTimeout(refreshTab, 450); confetti(90); toast('✅ ' + (ids.length > 1 ? ids.length + ' pagos verificados' : 'Pago verificado') + ' y completado' + (ids.length > 1 ? 's' : ''), 'ok');
+/* PASO 2: pagar lo verificado → se archiva */
+function pagarVerificado(lote) {
+  const l = A.sol.filter(s => s.lote === lote && s.estado === 'verificada'); if (!l.length) return; const c = l[0];
+  modal(`<div class="mh"><div class="ic big st-pa">💸</div><div><h3>Marcar pagado</h3><small class="mut">${esc(c.nombre)} · verificado${quien(c.verificadoPor) ? ' por ' + esc(c.verificadoPor) : ''}</small></div></div>
+    ${filasRecibos(l)}${desglose(suma(l), c.lineas, c.descuento, c.neto, 'Total a pagar')}
+    ${pagoCampos(c)}
+    <div class="row" style="margin-top:16px"><button class="btn ghost" onclick="closeModal()">Cancelar</button><button class="btn ok" id="pok">💸 Confirmar pago de ${eur(c.neto)}</button></div>`);
+  const P = bindPago(c, () => c.neto);
+  $('#pok').onclick = e => act(e.currentTarget, async () => {
+    const emp = empVal('pq', 'ha hecho el pago');
+    const r = await call('pagarLote', {ids:l.map(s => s.id), metodo:P.metodo(), fechaPago:$('#pf').value, empleado:emp});
+    r.solicitudes.forEach(upd); const card = $('#v_' + lote); if (card) card.classList.add('bye');
+    setTimeout(refreshTab, 400); confetti(90); coinRain(16); toast('✅ Pagado y archivado: ' + eur(r.neto), 'ok');
   });
-}
-async function verificar(id, btn) {
-  const s = A.sol.find(x => x.id === id); if (!s) return;
-  const ids = s.lote ? A.sol.filter(x => x.lote === s.lote && x.estado === 'pagada').map(x => x.id) : [id];
-  closeModal(); await verificarGrupo(ids.join(','), btn || document.createElement('button'));
 }
 function rechazarDe(idCliente) {
   const l = A.sol.filter(s => s.estado === 'pendiente' && s.idCliente === idCliente);
@@ -970,23 +1024,24 @@ function rechazar(id) {
   modal(`<h3>❌ Rechazar solicitud</h3><p class="mut">${esc(s.nombre)} · ${eur(s.importe)} · cargo del ${fday(s.fechaCargo)}</p>
     <label>MOTIVO (lo verá el cliente)</label><input id="rm" maxlength="140" placeholder="Ej.: el importe no coincide con el recibo">
     <div class="row" style="margin-top:16px"><button class="btn ghost" onclick="closeModal()">Volver</button><button class="btn red" id="rok">Rechazar</button></div>`);
-  $('#rok').onclick = e => act(e.currentTarget, async () => { const r = await call('rechazar', {id, motivo:$('#rm').value}); upd(r); refreshTab(); toast('Solicitud rechazada', 'ok'); });
+  $('#rok').onclick = e => act(e.currentTarget, async () => { await call('rechazar', {id, motivo:$('#rm').value}); await loadAll(); refreshTab(); toast('Solicitud rechazada', 'ok'); });
 }
 async function reabrir(id) {
   const s = A.sol.find(x => x.id === id);
   const n = s && s.lote ? A.sol.filter(x => x.lote === s.lote).length : 1;
-  if (!confirm(n > 1 ? 'Este pago incluye ' + n + ' recibos. ¿Deshacerlo y dejar los ' + n + ' otra vez pendientes de pago?' : '¿Volver a dejar esta solicitud como pendiente de pago? Se borran la fecha y el método de pago.')) return;
+  const que = s && s.estado === 'pagada' ? 'el pago' : 'la verificación';
+  if (!confirm(n > 1 ? 'Esto incluye ' + n + ' recibos. ¿Deshacer ' + que + ' y dejar los ' + n + ' otra vez pendientes?' : '¿Deshacer ' + que + ' y volver a dejar la solicitud pendiente?')) return;
   try { await call('reabrir', {id}); await loadAll(); refreshTab(); toast('Vuelve a estar pendiente', 'ok'); } catch (e) { toast(e.message, 'bad'); }
 }
 function solModalAdmin(id) {
   const s = A.sol.find(x => x.id === id); if (!s) return;
-  const acc = s.estado === 'pendiente' ? `<button class="btn ghost" onclick="rechazar('${s.id}')">❌ Rechazar</button><button class="btn" onclick="pagarModal('${s.id}')">💸 Marcar pagada</button>`
-    : s.estado === 'pagada' ? `<button class="btn ghost" onclick="reabrir('${s.id}')">↩ Deshacer</button><button class="btn ok" onclick="verificar('${s.id}', this)">✅ Verificar</button>`
-    : `<button class="btn ghost" onclick="reabrir('${s.id}')">↩ Volver a pendiente</button>`;
+  const acc = s.estado === 'pendiente' ? `<button class="btn ghost" onclick="rechazar('${s.id}')">❌ Rechazar</button><button class="btn" onclick="revisarGrupo('${s.idCliente}')">🔎 Revisar</button>`
+    : s.estado === 'verificada' ? `<button class="btn ghost" onclick="reabrir('${s.id}')">↩ Deshacer</button><button class="btn ok" onclick="pagarVerificado('${s.lote}')">💸 Marcar pagado</button>`
+    : s.estado === 'pagada' ? `<button class="btn ghost" onclick="reabrir('${s.id}')">↩ Deshacer el pago</button>` : `<button class="btn ghost" onclick="reabrir('${s.id}')">↩ Volver a pendiente</button>`;
   modal(`<div class="mh"><div class="ic big ${EST[s.estado].cls}">${EST[s.estado].ico}</div><div><h3>${eur(s.importe)} · ${esc(s.nombre)}</h3><small class="mut">${s.id} · ${esc(s.concepto || 'Sin concepto')}</small></div></div>
     <div class="box"><div class="kv"><span>Fecha del cargo</span><b>${fday(s.fechaCargo)}</b></div><div class="kv"><span>Estado</span>${chip(s.estado)}</div>
       <div class="kv"><span>Bizum</span><b class="mono">${esc(s.telefono)} ${copyBtn(s.telefono, 'Teléfono')}</b></div><div class="kv"><span>IBAN</span><b class="mono">${esc(s.iban)} ${copyBtn(s.iban, 'IBAN')}</b></div></div>
-    ${loteInfo(s, A.sol)}${timeline(s)}
+    ${loteInfo(s, A.sol)}${timeline(s, true)}
     <div class="row" style="margin-top:16px">${acc}</div><button class="link" style="width:100%;margin-top:6px" onclick="closeModal()">Cerrar</button>`);
 }
 
@@ -1023,16 +1078,19 @@ function fichaCliente(id) {
     <div class="stats3" style="margin-top:12px"><div class="mini2"><b class="pos">${eur(c.resumen.cobrado)}</b><small class="mut">pagado</small></div><div class="mini2"><b class="amb">${eur(c.resumen.enCamino)}</b><small class="mut">pendiente</small></div><div class="mini2"><b>${sol.length}</b><small class="mut">solicitudes</small></div></div>
     <div class="dato"><span>🏦</span><div><small class="mut">IBAN</small><b class="mono">${esc(c.iban)}</b></div>${copyBtn(c.iban, 'IBAN')}</div>
     <div class="dato"><span>📱</span><div><small class="mut">Bizum</small><b class="mono">${esc(c.telefono)}</b></div>${copyBtn(c.telefono, 'Teléfono')}</div>
-    ${sol.some(s => s.estado === 'pendiente') ? `<button class="btn big pulse" style="margin-top:12px" onclick="pagarGrupo('${id}')">💸 Revisar y pagar (${sol.filter(s => s.estado === 'pendiente').length}) · ${eur(suma(sol.filter(s => s.estado === 'pendiente')))}</button>` : ''}
+    ${sol.some(s => s.estado === 'pendiente') ? `<button class="btn big pulse" style="margin-top:12px" onclick="revisarGrupo('${id}')">🔎 Revisar (${sol.filter(s => s.estado === 'pendiente').length}) · ${eur(suma(sol.filter(s => s.estado === 'pendiente')))}</button>` : ''}
+    ${grupos(sol.filter(s => s.estado === 'verificada'), s => s.lote).map(g => `<button class="btn ok big" style="margin-top:10px" onclick="pagarVerificado('${g[0].lote}')">💸 Marcar pagado · ${eur(g[0].neto)}</button>`).join('')}
     <details class="box"><summary style="cursor:pointer">✏️ Editar datos</summary>
       <label>NOMBRE</label><input id="e1" value="${esc(c.nombre)}"><label>TELÉFONO</label><input id="e2" value="${esc(c.telefono)}">
       <label>IBAN</label>${ibanField('e4', c.iban)}
       <label class="sw"><input type="checkbox" id="e3" ${c.activo ? 'checked' : ''}> Cliente activo</label>
       <button class="btn big" style="margin-top:12px" id="eok">Guardar cambios</button></details>
-    <h3 style="margin:16px 0 4px;font-size:16px">💸 Pagos realizados</h3><div>${pagosDe(sol).map(p => pagoRow(p)).join('') || '<div class="empty">Aún no se le ha pagado nada</div>'}</div>
+    <div id="ibh"></div>
+    <h3 style="margin:16px 0 4px;font-size:16px">💸 Pagos realizados (archivo)</h3><div>${pagosDe(sol).map(p => pagoRow(p)).join('') || '<div class="empty">Aún no se le ha pagado nada</div>'}</div>
     <h3 style="margin:16px 0 4px;font-size:16px">🧾 Solicitudes</h3><div>${sol.length ? sol.map(s => solRow(s, true)).join('') : '<div class="empty">Sin solicitudes</div>'}</div>
     <button class="btn ghost big" style="margin-top:14px" onclick="closeModal()">Cerrar</button>`);
   ibanLive($('#e4'));
+  call('ibanHist', {id}).then(h => { const el = $('#ibh'); if (el && h.length) el.innerHTML = `<details class="box"><summary style="cursor:pointer">🏦 Cambios de cuenta bancaria (${h.length})</summary>${h.map(x => `<div class="kv" style="flex-wrap:wrap"><span>${fdate(x.fecha)}</span><b class="mono" style="font-size:12px"><s class="mut">${esc(x.anterior)}</s> → ${esc(x.nuevo)}</b></div>`).join('')}</details>`; }).catch(() => {});
   $('#eok').onclick = e => act(e.currentTarget, async () => {
     if (!ibanValido($('#e4').value)) throw new Error('El IBAN no es correcto');
     await call('updateClient', {id, nombre:$('#e1').value, telefono:$('#e2').value, iban:$('#e4').value, activo:$('#e3').checked});
@@ -1044,7 +1102,7 @@ function fichaCliente(id) {
 function tabHi() {
   A.hf = A.hf || ''; A.hv = A.hv || 'pagos';
   if (A.hv === 'pagos') return tabPagos();
-  $('#tab').innerHTML = `<div class="glass">${hvSeg()}<div class="seg wrapseg" id="hf" style="margin-top:12px">${[['', 'Todas'], ['pendiente', '⏳ Pendientes'], ['pagada', '💸 Pagadas'], ['completada', '✅ Completadas'], ['rechazada', '❌ Rechazadas'], ['cancelada', '⊘ Canceladas']].map(([k, l]) => `<button data-f="${k}" class="${A.hf === k ? 'on' : ''}">${l}</button>`).join('')}</div>
+  $('#tab').innerHTML = `<div class="glass">${hvSeg()}<div class="seg wrapseg" id="hf" style="margin-top:12px">${[['', 'Todas'], ['pendiente', '⏳ Pendientes'], ['verificada', '🔎 Verificadas'], ['pagada', '✅ Pagadas'], ['rechazada', '❌ Rechazadas'], ['cancelada', '⊘ Canceladas']].map(([k, l]) => `<button data-f="${k}" class="${A.hf === k ? 'on' : ''}">${l}</button>`).join('')}</div>
     <input id="hq" placeholder="Buscar por cliente, concepto o nº de solicitud…" style="margin-top:12px"><div id="hl" style="margin-top:6px"></div><div class="mut" id="hsum" style="text-align:right;font-size:13px;margin-top:8px"></div></div>`;
   const draw = () => {
     const v = $('#hq').value.trim().toLowerCase();
@@ -1079,17 +1137,17 @@ async function tabSt() {
     const s = await call('stats');
     $('#tab').innerHTML = `<div class="stack"><div class="stats">
       <div class="glass stat"><span class="mut">👥 Clientes activos</span><b>${num(s.activos)}</b></div>
-      <div class="glass stat"><span class="mut">⏳ Pendiente de pago</span><b class="amb">${eur(s.importePendiente)}</b><small class="mut">${s.pendientes} solicitudes</small></div>
-      <div class="glass stat"><span class="mut">💸 Por verificar</span><b class="blu">${eur(s.importePorVerificar)}</b><small class="mut">${s.porVerificar} solicitudes</small></div>
+      <div class="glass stat"><span class="mut">⏳ Por revisar</span><b class="amb">${eur(s.importePendiente)}</b><small class="mut">${s.pendientes} solicitudes</small></div>
+      <div class="glass stat"><span class="mut">🔎 Verificado, por pagar</span><b class="blu">${eur(s.importeVerificado)}</b><small class="mut">${s.verificadas} solicitudes</small></div>
       <div class="glass stat"><span class="mut">📅 Pagado este mes</span><b class="pos">${eur(s.pagadoMes)}</b></div>
-      <div class="glass stat"><span class="mut">💰 Pagado en total</span><b class="pos">${eur(s.importePagado)}</b><small class="mut">${s.completadas} completadas</small></div>
+      <div class="glass stat"><span class="mut">💰 Pagado en total</span><b class="pos">${eur(s.importePagado)}</b><small class="mut">${s.pagadas} recibos pagados</small></div>
       <div class="glass stat"><span class="mut">📱 Descontado por líneas</span><b class="neg">${eur(s.descuentos)}</b></div></div>
       <div class="glass" style="max-width:520px"><h3>📱 Descuento por línea móvil</h3><label>EUROS QUE SE DESCUENTAN POR CADA LÍNEA</label><input id="dl" inputmode="decimal" value="${String(s.config.descLinea).replace('.', ',')}">
         <p class="mut" style="font-size:13px">Al pagar, la app te pregunta si el cliente tiene líneas y descuenta esta cantidad por cada una.</p><button class="btn" id="dlok">Guardar</button></div>
       <div class="glass" style="max-width:520px"><h3>🔔 Avisos</h3>
         <label class="sw"><input type="checkbox" id="av" ${s.config.avisoAdmin ? 'checked' : ''}> Enviarme un correo cada vez que un cliente pida una bonificación</label>
         <p class="mut" style="font-size:12px;margin:6px 0 0">Gmail permite unos 100 correos al día desde la app.</p></div>
-      <div class="glass" style="max-width:520px"><h3>👷 Empleados</h3><p class="mut" style="font-size:13px;margin:6px 0 0">Las personas que hacen los pagos. Al registrar un pago tendrás que elegir quién lo hizo.</p>
+      <div class="glass" style="max-width:520px"><h3>👷 Empleados</h3><p class="mut" style="font-size:13px;margin:6px 0 0">Las personas que verifican y hacen los pagos. Al verificar o pagar tendrás que elegir quién fue.</p>
         <div id="emls" style="margin-top:10px"></div>
         <div class="row" style="margin-top:10px"><input id="emn" maxlength="40" placeholder="Nombre del empleado"><button class="btn" style="flex:none" id="emadd">＋ Añadir</button></div></div>
       <div class="glass" style="max-width:520px" id="totpbox"><h3>Acceso con Google Authenticator</h3><p class="mut">Cargando…</p></div></div>`;
