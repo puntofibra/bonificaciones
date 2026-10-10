@@ -862,7 +862,9 @@ const TABS = [['pe','⏳','Pendientes'], ['cl','👥','Clientes'], ['hi','🧾',
 async function adminView(d) {
   S.user = d.user; clearInterval(S.poll);
   $('#app').innerHTML = `${topbar('Administrador')}<div class="adm"><nav class="nav" id="nav"></nav><main class="wrap" id="tab"></main></div>`;
-  showInst(); await loadAll(); tab(A.tab);
+  showInst(); navBadges();
+  $('#tab').innerHTML = '<div class="glass"><div class="empty"><span class="spin"></span><br>Cargando datos…</div></div>';
+  await loadAll(); tab(A.tab);
   S.poll = setInterval(async () => {
     if (document.hidden || $('#modal')) return;
     const antes = A.sol.filter(s => s.estado === 'pendiente').map(s => s.id);
@@ -873,9 +875,11 @@ async function adminView(d) {
   }, 20000);
 }
 async function loadAll() {
-  try { [A.clients, A.sol, A.deudas] = await Promise.all([call('clients'), call('solicitudes', {}), call('deudas', {})]); } catch (e) { toast(e.message, 'bad'); }
-  call('empleados').then(e => { A.emps = e; }).catch(() => {});
-  if (!A.descLinea) call('stats').then(st => { A.descLinea = st.config.descLinea; }).catch(() => {});
+  // Una sola llamada trae todo el panel (más rápido y menos expuesto a los fallos de Google)
+  try {
+    const p = await call('panel');
+    A.clients = p.clients; A.sol = p.solicitudes; A.deudas = p.deudas; A.emps = p.empleados; A.descLinea = p.descLinea;
+  } catch (e) { A.clients = A.clients || []; A.sol = A.sol || []; A.deudas = A.deudas || []; toast(e.message, 'bad'); }
 }
 function navBadges() {
   const n = A.sol.filter(s => s.estado === 'pendiente' || s.estado === 'verificada').length;
