@@ -663,7 +663,7 @@ function timeline(s, admin) {
 function loteInfo(s, lista) {
   if (!s.lote) return '';
   const l = lista.filter(x => x.lote === s.lote), t = suma(l);
-  return `<div class="box"><b>${l.length > 1 ? '🧾 Grupo de ' + l.length + ' recibos' : '🧾 Detalle'}</b>${l.length > 1 ? filasRecibos(l) : ''}${desglose(t, s.lineas, s.descuento, s.neto, s.estado === 'pagada' ? 'Total pagado' : 'Total a pagar')}</div>`;
+  return `<div class="box"><b>${l.length > 1 ? '🧾 Grupo de ' + l.length + ' recibos' : '🧾 Detalle'}</b>${l.length > 1 ? filasRecibos(l) : ''}${desglose(t, s.lineas, s.descuento, s.neto, s.estado === 'pagada' ? 'Total pagado' : 'Total a pagar', s.excesos)}</div>`;
 }
 /* historial de pagos (archivo): cada pago = un grupo (lote) */
 function pagosDe(lista) {
@@ -672,20 +672,20 @@ function pagosDe(lista) {
   return Object.values(g).map(l => {
     const c = l[0], total = Math.round(l.reduce((x, s) => x + s.importe, 0) * 100) / 100;
     return {k: c.lote || c.id, nombre: c.nombre, idCliente: c.idCliente, fecha: c.fechaPago, metodo: c.metodo, items: l, total, quien: quien(c.pagadoPor), 
-      lineas: c.lote ? c.lineas : 0, descuento: c.lote ? c.descuento : 0, neto: c.lote ? c.neto : total};
+      lineas: c.lote ? c.lineas : 0, descuento: c.lote ? c.descuento : 0, excesos: c.lote ? (c.excesos || 0) : 0, neto: c.lote ? c.neto : total};
   }).sort((x, y) => new Date(y.fecha) - new Date(x.fecha));
 }
 function pagoRow(p, admin) {
   P_[p.k] = p;
   return `<div class="mv sol" onclick="pagoModal('${p.k}', ${admin ? 1 : 0})"><div class="ic st-ok">💸</div>
-    <div class="t"><b>${admin ? esc(p.nombre) : (MET[p.metodo] || 'Pago')}</b><small>${fday(p.fecha)} · ${p.items.length} recibo${p.items.length > 1 ? 's' : ''}${p.lineas ? ' · −' + eur(p.descuento) + ' líneas' : ''}${admin ? ' · ' + (MET[p.metodo] || '') + (p.quien ? ' · 👤 ' + esc(p.quien) : '') : ''}</small></div>
+    <div class="t"><b>${admin ? esc(p.nombre) : (MET[p.metodo] || 'Pago')}</b><small>${fday(p.fecha)} · ${p.items.length} recibo${p.items.length > 1 ? 's' : ''}${p.lineas ? ' · −' + eur(p.descuento) + ' líneas' : ''}${p.excesos ? ' · −' + eur(p.excesos) + ' extras' : ''}${admin ? ' · ' + (MET[p.metodo] || '') + (p.quien ? ' · 👤 ' + esc(p.quien) : '') : ''}</small></div>
     <div class="pts pos">${eur(p.neto)}<small>${p.items.length > 1 ? 'de ' + eur(p.total) : ''}</small></div></div>`;
 }
 const P_ = {};
 function pagoModal(k, admin) {
   const p = P_[k]; if (!p) return;
   modal(`<div class="mh"><div class="ic big st-ok">💸</div><div><h3>${eur(p.neto)}${admin ? ' · ' + esc(p.nombre) : ''}</h3><small class="mut">${MET[p.metodo] || ''} · pagado el ${fday(p.fecha)}</small></div></div>
-    <div class="box"><b>🧾 Recibos incluidos</b>${filasRecibos(p.items)}${desglose(p.total, p.lineas, p.descuento, p.neto)}</div>
+    <div class="box"><b>🧾 Recibos incluidos</b>${filasRecibos(p.items)}${desglose(p.total, p.lineas, p.descuento, p.neto, '', p.excesos)}</div>
     ${admin ? `<div class="kv" style="margin-top:8px"><span>Pagado por</span><b>${esc(p.quien || '—')}</b></div>` : ''}
     <div class="kv"><span>Estado</span>${chip('pagada')}</div>
     ${admin ? `<button class="btn ghost big" style="margin-top:10px" onclick="closeModal();fichaCliente('${p.idCliente}')">👤 Ver ficha del cliente</button>` : ''}
@@ -879,14 +879,14 @@ function grupoPendiente(l) {
     ${datosCobro(c)}
     <div class="row" style="margin-top:12px"><button class="btn ghost" onclick="rechazarDe('${c.idCliente}')">❌ Rechazar…</button><button class="btn" onclick="revisarGrupo('${c.idCliente}')">💸 Pagar${l.length > 1 ? ' (' + l.length + ')' : ''}</button></div></div>`;
 }
-function desglose(t, lin, desc, neto, lbl) {
-  return `<div class="dsg"><div><span>Suma de recibos</span><b>${eur(t)}</b></div>${lin ? `<div class="neg"><span>− ${lin} línea${lin > 1 ? 's' : ''} × ${eur(desc / lin)}</span><b>− ${eur(desc)}</b></div>` : ''}<div class="tot"><span>${lbl || 'Total'}</span><b>${eur(neto)}</b></div></div>`;
+function desglose(t, lin, desc, neto, lbl, exc) {
+  return `<div class="dsg"><div><span>Suma de recibos</span><b>${eur(t)}</b></div>${lin ? `<div class="neg"><span>− ${lin} línea${lin > 1 ? 's' : ''} × ${eur(desc / lin)}</span><b>− ${eur(desc)}</b></div>` : ''}${exc ? `<div class="neg"><span>− Consumos extra</span><b>− ${eur(exc)}</b></div>` : ''}<div class="tot"><span>${lbl || 'Total'}</span><b>${eur(neto)}</b></div></div>`;
 }
 function grupoVerificado(l) {
   const c = l[0];
   return `<div class="glass scard st-pe" id="v_${c.lote}">
     <div class="sc-top"><div><b>${esc(c.nombre)}</b><small class="mut">Pendiente de pago${l.length > 1 ? ' · ' + l.length + ' recibos' : ''}</small></div><div class="sc-imp">${eur(c.neto)}</div></div>
-    ${filasRecibos(l)}${desglose(suma(l), c.lineas, c.descuento, c.neto, 'Total a pagar')}
+    ${filasRecibos(l)}${desglose(suma(l), c.lineas, c.descuento, c.neto, 'Total a pagar', c.excesos)}
     ${datosCobro(c)}
     <div class="row" style="margin-top:12px"><button class="btn ghost" onclick="reabrir('${c.id}')">↩ Deshacer</button><button class="btn ok" onclick="pagarVerificado('${c.lote}')">💸 Marcar pagado</button></div></div>`;
 }
@@ -950,19 +950,25 @@ function revisarGrupo(idCliente, soloIds) {
       <p class="mut" style="font-size:12px;margin:4px 0 8px">Las líneas no se bonifican: se descuentan ${eur(dl)} por línea.</p>
       <div class="seg" id="ql"><button data-v="no" class="on">No</button><button data-v="si">Sí</button></div>
       <div id="qn" hidden><label>¿CUÁNTAS LÍNEAS?</label><div class="stepper"><button type="button" id="lm">−</button><input id="ln" inputmode="numeric" value="1"><button type="button" id="lp">＋</button></div></div></div>
+    <div class="box"><b>📈 ¿El cliente tiene consumos extra (excesos)?</b>
+      <p class="mut" style="font-size:12px;margin:4px 0 8px">Los consumos extra no se bonifican: se descuentan del total.</p>
+      <div class="seg" id="qx"><button data-v="no" class="on">No</button><button data-v="si">Sí</button></div>
+      <div id="qxn" hidden><label>IMPORTE DE LOS CONSUMOS EXTRA (€)</label><div class="money"><input id="xn" inputmode="decimal" placeholder="0,00" autocomplete="off"><span>€</span></div></div></div>
     <div id="dsg"></div>
     ${pagoCampos(c)}
     <div class="row" style="margin-top:16px"><button class="btn ghost" onclick="closeModal()">Cancelar</button><button class="btn ok" id="pok">Marcar pagado</button></div>`);
-  let tiene = false;
+  let tiene = false, exc = false;
   const sel = () => [...document.querySelectorAll('.rck')].filter(x => x.checked).map(x => x.value);
   const vals = () => {
     const ids = sel(), t = suma(l.filter(s => ids.indexOf(s.id) >= 0));
-    const lin = tiene ? Math.max(0, parseInt($('#ln').value) || 0) : 0, desc = Math.round(lin * dl * 100) / 100, neto = Math.round((t - desc) * 100) / 100;
-    return {ids, t, lin, desc, neto};
+    const lin = tiene ? Math.max(0, parseInt($('#ln').value) || 0) : 0, desc = Math.round(lin * dl * 100) / 100;
+    const xs = exc ? Math.round((parseFloat($('#xn').value.replace(',', '.')) || 0) * 100) / 100 : 0;
+    const neto = Math.round((t - desc - xs) * 100) / 100;
+    return {ids, t, lin, desc, xs, neto};
   };
   const calc = () => {
-    const {ids, t, lin, desc, neto} = vals();
-    $('#dsg').innerHTML = desglose(t, lin, desc, neto, 'Total a pagar') + (neto < 0 ? '<p style="color:var(--bad);font-size:13px">⚠ El descuento supera la suma de los recibos</p>' : '');
+    const {ids, t, lin, desc, xs, neto} = vals();
+    $('#dsg').innerHTML = desglose(t, lin, desc, neto, 'Total a pagar', xs) + (neto < 0 ? '<p style="color:var(--bad);font-size:13px">⚠ Los descuentos superan la suma de los recibos</p>' : '');
     $('#pok').textContent = !ids.length ? 'Marca algún recibo' : '💸 Marcar pagado (' + eur(Math.max(0, neto)) + ')';
     $('#pok').disabled = !ids.length || neto < 0;
     if (P) P.info();
@@ -971,16 +977,19 @@ function revisarGrupo(idCliente, soloIds) {
   let P = null;
   document.querySelectorAll('.rck').forEach(x => x.onchange = calc);
   document.querySelectorAll('#ql button').forEach(b => b.onclick = () => { document.querySelectorAll('#ql button').forEach(x => x.classList.toggle('on', x === b)); tiene = b.dataset.v === 'si'; $('#qn').hidden = !tiene; calc(); if (tiene) $('#ln').focus(); });
+  document.querySelectorAll('#qx button').forEach(b => b.onclick = () => { document.querySelectorAll('#qx button').forEach(x => x.classList.toggle('on', x === b)); exc = b.dataset.v === 'si'; $('#qxn').hidden = !exc; calc(); if (exc) $('#xn').focus(); });
+  $('#xn').oninput = calc;
   $('#ln').oninput = calc;
   $('#lm').onclick = () => { $('#ln').value = Math.max(1, (parseInt($('#ln').value) || 1) - 1); calc(); };
   $('#lp').onclick = () => { $('#ln').value = (parseInt($('#ln').value) || 0) + 1; calc(); };
   P = bindPago(c, () => vals().neto);
   calc();
   $('#pok').onclick = e => act(e.currentTarget, async () => {
-    const {ids, lin} = vals();
+    const {ids, lin, xs} = vals();
     if (tiene && !(lin > 0)) throw new Error('Indica cuántas líneas tiene');
+    if (exc && !(xs > 0)) throw new Error('Escribe el importe de los consumos extra');
     const emp = empVal('pq', 'ha hecho el pago');
-    const r = await call('pagarLote', {ids, lineas:lin, metodo:P.metodo(), fechaPago:$('#pf').value, empleado:emp});
+    const r = await call('pagarLote', {ids, lineas:lin, excesos:xs, metodo:P.metodo(), fechaPago:$('#pf').value, empleado:emp});
     r.solicitudes.forEach(upd); refreshTab(); toast('💸 Pago de ' + eur(r.neto) + ' registrado y archivado', 'ok'); coinRain(16); confetti(80);
   });
 }
@@ -1129,7 +1138,8 @@ async function tabSt() {
       <div class="glass stat"><span class="mut">⏳ Pendiente de pago</span><b class="amb">${eur(s.importePendiente + (s.importeVerificado || 0))}</b><small class="mut">${s.pendientes + (s.verificadas || 0)} solicitudes</small></div>
       <div class="glass stat"><span class="mut">📅 Pagado este mes</span><b class="pos">${eur(s.pagadoMes)}</b></div>
       <div class="glass stat"><span class="mut">💰 Pagado en total</span><b class="pos">${eur(s.importePagado)}</b><small class="mut">${s.pagadas} recibos pagados</small></div>
-      <div class="glass stat"><span class="mut">📱 Descontado por líneas</span><b class="neg">${eur(s.descuentos)}</b></div></div>
+      <div class="glass stat"><span class="mut">📱 Descontado por líneas</span><b class="neg">${eur(s.descuentos)}</b></div>
+      <div class="glass stat"><span class="mut">📈 Descontado por consumos extra</span><b class="neg">${eur(s.excesos || 0)}</b></div></div>
       <div class="glass" style="max-width:520px"><h3>📱 Descuento por línea móvil</h3><label>EUROS QUE SE DESCUENTAN POR CADA LÍNEA</label><input id="dl" inputmode="decimal" value="${String(s.config.descLinea).replace('.', ',')}">
         <p class="mut" style="font-size:13px">Al pagar, la app te pregunta si el cliente tiene líneas y descuenta esta cantidad por cada una.</p><button class="btn" id="dlok">Guardar</button></div>
       <div class="glass" style="max-width:520px"><h3>🔔 Avisos</h3>
