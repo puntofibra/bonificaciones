@@ -1047,10 +1047,12 @@ function solModalAdmin(id) {
 
 /* — Clientes — */
 function tabCl() {
-  $('#tab').innerHTML = `<div class="glass"><div class="row" style="margin-bottom:12px"><input id="cq" placeholder="Buscar por nombre, correo, teléfono o IBAN…"><button class="btn ghost" style="flex:none" onclick="scanModal()" title="Escanear QR">📷</button><button class="btn" style="flex:none" onclick="newClient()">＋ Alta</button></div><div id="cl"></div></div>`;
+  $('#tab').innerHTML = `<div class="glass"><div class="row" style="margin-bottom:12px"><input id="cq" placeholder="Buscar por nombre, correo, teléfono o cuenta (con o sin espacios)…"><button class="btn ghost" style="flex:none" onclick="scanModal()" title="Escanear QR">📷</button><button class="btn" style="flex:none" onclick="newClient()">＋ Alta</button></div><div id="cl"></div></div>`;
   const draw = () => {
-    const v = $('#cq').value.trim().toLowerCase(), vv = v.replace(/\s/g, '');
-    const r = A.clients.filter(c => !v || c.nombre.toLowerCase().includes(v) || c.email.includes(v) || c.id.toLowerCase().includes(v) || c.telefono.includes(vv) || c.iban.replace(/\s/g, '').toLowerCase().includes(vv));
+    const v = $('#cq').value.trim().toLowerCase(), vv = v.replace(/[^a-z0-9]/g, ''), dig = v.replace(/\D/g, '');
+    const r = A.clients.filter(c => !v || c.nombre.toLowerCase().includes(v) || c.email.includes(v) || c.id.toLowerCase().includes(v)
+      || (dig.length >= 3 && c.telefono.replace(/\D/g, '').includes(dig))
+      || (vv.length >= 4 && c.iban.replace(/[^A-Za-z0-9]/g, '').toLowerCase().includes(vv)));
     $('#cl').innerHTML = r.map(c => `<div class="mv ${c.activo ? '' : 'off'}" style="cursor:pointer" onclick="fichaCliente('${c.id}')"><div class="ic">${c.nombre.trim().charAt(0).toUpperCase()}</div>
       <div class="t"><b>${esc(c.nombre)}${c.activo ? '' : '<span class="tag">BAJA</span>'}${c.pendientes ? `<span class="tag amb">${c.pendientes} pendiente${c.pendientes > 1 ? 's' : ''}</span>` : ''}</b><small>${esc(c.telefono)} · ${maskIban(c.iban)}</small></div>
       <div class="pts">${eur(c.resumen.cobrado)}<small>pagado</small></div></div>`).join('') || '<div class="empty">No hay clientes todavía</div>';
@@ -1103,10 +1105,11 @@ function tabHi() {
   A.hf = A.hf || ''; A.hv = A.hv || 'pagos';
   if (A.hv === 'pagos') return tabPagos();
   $('#tab').innerHTML = `<div class="glass">${hvSeg()}<div class="seg wrapseg" id="hf" style="margin-top:12px">${[['', 'Todas'], ['pendiente', '⏳ Pendientes'], ['verificada', '🔎 Verificadas'], ['pagada', '✅ Pagadas'], ['rechazada', '❌ Rechazadas'], ['cancelada', '⊘ Canceladas']].map(([k, l]) => `<button data-f="${k}" class="${A.hf === k ? 'on' : ''}">${l}</button>`).join('')}</div>
-    <input id="hq" placeholder="Buscar por cliente, concepto o nº de solicitud…" style="margin-top:12px"><div id="hl" style="margin-top:6px"></div><div class="mut" id="hsum" style="text-align:right;font-size:13px;margin-top:8px"></div></div>`;
+    <input id="hq" placeholder="Buscar por cliente, concepto, nº de solicitud, teléfono o cuenta…" style="margin-top:12px"><div id="hl" style="margin-top:6px"></div><div class="mut" id="hsum" style="text-align:right;font-size:13px;margin-top:8px"></div></div>`;
   const draw = () => {
     const v = $('#hq').value.trim().toLowerCase();
-    const r = A.sol.filter(s => (!A.hf || s.estado === A.hf) && (!v || (s.nombre + ' ' + s.concepto + ' ' + s.id).toLowerCase().includes(v)));
+    const vv = v.replace(/[^a-z0-9]/g, '');
+    const r = A.sol.filter(s => (!A.hf || s.estado === A.hf) && (!v || (s.nombre + ' ' + s.concepto + ' ' + s.id).toLowerCase().includes(v) || (vv.length >= 4 && (s.iban || '').replace(/[^A-Za-z0-9]/g, '').toLowerCase().includes(vv)) || (vv.length >= 3 && /^\d+$/.test(vv) && (s.telefono || '').replace(/\D/g, '').includes(vv))));
     $('#hl').innerHTML = r.map(s => solRow(s, true)).join('') || '<div class="empty">Sin solicitudes</div>';
     $('#hsum').textContent = r.length + ' solicitudes · ' + eur(r.reduce((a, s) => a + s.importe, 0));
   };
