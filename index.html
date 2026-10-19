@@ -227,6 +227,10 @@ img.lg,img.logo{background:none;object-fit:contain;display:block}
 .scard.bye{transform:translateX(60px) scale(.95);opacity:0}
 .sc-top{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}.sc-top b{display:block;font-size:16px}.sc-top small{font-size:12px}
 .sc-imp{font-size:26px;font-weight:800;color:var(--c);white-space:nowrap}
+.sc-tog{cursor:pointer;user-select:none;-webkit-tap-highlight-color:transparent}
+.sc-fl{display:inline-block;font-style:normal;font-size:13px;opacity:.6;transition:transform .25s}
+.scard.abierta .sc-fl{transform:rotate(180deg)}
+.scard .sc-det{display:none}.scard.abierta .sc-det{display:block;animation:rise .3s both}
 .sc-mid{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:13px;color:var(--mut);margin:8px 0 4px}.sc-mid b{color:#fff}
 .sec{font-size:16px;margin:6px 0 -4px}
 .amb{color:#fbbf24}.blu{color:#60a5fa}
@@ -889,7 +893,8 @@ async function loadAll() {
   } catch (e) { A.clients = A.clients || []; A.sol = A.sol || []; A.deudas = A.deudas || []; toast(e.message, 'bad'); }
 }
 function navBadges() {
-  const n = A.sol.filter(s => s.estado === 'pendiente' || s.estado === 'verificada').length;
+  // cuenta clientes con algo pendiente (no recibos sueltos)
+  const n = new Set(A.sol.filter(s => s.estado === 'pendiente' || s.estado === 'verificada').map(s => s.idCliente)).size;
   const b = document.querySelector('#nav [data-k="pe"] em'); if (b) { b.textContent = n; b.hidden = !n; }
 }
 function tab(t) {
@@ -917,21 +922,29 @@ function filasRecibos(l, check) {
 }
 function grupoPendiente(l) {
   const c = l[0];
-  return `<div class="glass scard st-pe" id="g_${c.idCliente}">
-    <div class="sc-top"><div><b>${esc(c.nombre)}</b><small class="mut">${l.length} recibo${l.length > 1 ? 's' : ''} pendiente${l.length > 1 ? 's' : ''} · el último pedido ${fdate(l[l.length - 1].creada)}</small></div><div class="sc-imp">${eur(suma(l))}</div></div>
-    ${filasRecibos(l)}
-    ${datosCobro(c)}
+  const k = 'g_' + c.idCliente, ab = A.abiertas && A.abiertas[k];
+  return `<div class="glass scard st-pe${ab ? ' abierta' : ''}" id="${k}">
+    <div class="sc-top sc-tog" onclick="plegar('${k}')"><div><b>${esc(c.nombre)} <i class="sc-fl">▾</i></b><small class="mut">${l.length} recibo${l.length > 1 ? 's' : ''} pendiente${l.length > 1 ? 's' : ''} · el último pedido ${fdate(l[l.length - 1].creada)}</small></div><div class="sc-imp">${eur(suma(l))}</div></div>
+    <div class="sc-det">${filasRecibos(l)}
+    ${datosCobro(c)}</div>
     <div class="row" style="margin-top:12px"><button class="btn ghost" onclick="rechazarDe('${c.idCliente}')">❌ Rechazar…</button><button class="btn" onclick="revisarGrupo('${c.idCliente}')">💸 Pagar${l.length > 1 ? ' (' + l.length + ')' : ''}</button></div></div>`;
+}
+/* despliega / pliega la ficha de un cliente pendiente (se recuerda al refrescar) */
+function plegar(k) {
+  const el = document.getElementById(k); if (!el) return;
+  A.abiertas = A.abiertas || {};
+  A.abiertas[k] = el.classList.toggle('abierta');
 }
 function desglose(t, lin, desc, neto, lbl, exc, deu) {
   return `<div class="dsg"><div><span>Suma de recibos</span><b>${eur(t)}</b></div>${lin ? `<div class="neg"><span>− ${lin} línea${lin > 1 ? 's' : ''} × ${eur(desc / lin)}</span><b>− ${eur(desc)}</b></div>` : ''}${exc ? `<div class="neg"><span>− Consumos extra</span><b>− ${eur(exc)}</b></div>` : ''}${deu ? `<div class="neg"><span>− Deuda descontada</span><b>− ${eur(deu)}</b></div>` : ''}<div class="tot"><span>${lbl || 'Total'}</span><b>${eur(neto)}</b></div></div>`;
 }
 function grupoVerificado(l) {
   const c = l[0];
-  return `<div class="glass scard st-pe" id="v_${c.lote}">
-    <div class="sc-top"><div><b>${esc(c.nombre)}</b><small class="mut">Pendiente de pago${l.length > 1 ? ' · ' + l.length + ' recibos' : ''}</small></div><div class="sc-imp">${eur(c.neto)}</div></div>
-    ${filasRecibos(l)}${desglose(suma(l), c.lineas, c.descuento, c.neto, 'Total a pagar', c.excesos)}
-    ${datosCobro(c)}
+  const k = 'v_' + c.lote, ab = A.abiertas && A.abiertas[k];
+  return `<div class="glass scard st-pe${ab ? ' abierta' : ''}" id="${k}">
+    <div class="sc-top sc-tog" onclick="plegar('${k}')"><div><b>${esc(c.nombre)} <i class="sc-fl">▾</i></b><small class="mut">Pendiente de pago${l.length > 1 ? ' · ' + l.length + ' recibos' : ''}</small></div><div class="sc-imp">${eur(c.neto)}</div></div>
+    <div class="sc-det">${filasRecibos(l)}${desglose(suma(l), c.lineas, c.descuento, c.neto, 'Total a pagar', c.excesos)}
+    ${datosCobro(c)}</div>
     <div class="row" style="margin-top:12px"><button class="btn ghost" onclick="reabrir('${c.id}')">↩ Deshacer</button><button class="btn ok" onclick="pagarVerificado('${c.lote}')">💸 Marcar pagado</button></div></div>`;
 }
 /* escáner del QR del cliente */
