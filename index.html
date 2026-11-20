@@ -1010,17 +1010,23 @@ function menuPagar(ev, idCliente) {
   m.querySelector('button').onclick = () => { cerrar(); revisarGrupo(idCliente, null, true); };
   setTimeout(() => { addEventListener('pointerdown', fuera, true); addEventListener('keydown', esc_, true); addEventListener('scroll', cerrar, true); }, 0);
 }
-/* pago ya preparado: un solo toque y queda pagado y archivado (no vuelve a preguntar nada) */
-async function pagarPreparado(lote, btn) {
+/* pago ya preparado: no vuelve a preguntar los datos, solo pide confirmar antes de dejarlo pagado y archivado */
+function pagarPreparado(lote) {
   const l = A.sol.filter(s => s.lote === lote && s.estado === 'verificada'); if (!l.length) return; const c = l[0];
   if (!c.metodo || !MET[c.metodo]) return pagarVerificado(lote);   // verificaciones antiguas sin método guardado: se pregunta
-  if (btn) { if (btn.disabled) return; btn.disabled = true; btn.textContent = '⏳ Pagando…'; }
-  try {
+  // todo está ya preparado: solo se pide confirmar, para no pagar por un toque sin querer
+  modal(`<div style="text-align:center"><div class="ic big st-ok" style="margin:0 auto 10px">💸</div><h3>¿Seguro que quieres hacer el pago?</h3>
+    <p class="mut" style="margin:6px 0 2px">${esc(c.nombre)}${l.length > 1 ? ' · ' + l.length + ' recibos' : ''}</p>
+    <div style="font-size:38px;font-weight:800;color:#34d399;margin:6px 0">${eur(c.neto)}</div>
+    <p class="mut" style="font-size:13px;margin:0">${MET[c.metodo]}${c.pagadoPor ? ' · paga ' + esc(c.pagadoPor) : ''}</p>
+    <p class="mut" style="font-size:12px;margin:10px 0 0">Quedará pagado y archivado con fecha de hoy, y el cliente lo verá como pagado.</p>
+    <div class="row" style="margin-top:16px"><button class="btn ghost" onclick="closeModal()">Cancelar</button><button class="btn ok" id="ppok">✅ Sí, pagar</button></div></div>`);
+  $('#ppok').onclick = e => act(e.currentTarget, async () => {
     const r = await call('pagarLote', {ids:l.map(s => s.id), fechaPago:today()});
     r.solicitudes.forEach(upd); if (r.deudas) setDeudas(c.idCliente, r.deudas);
-    const card = $('#v_' + lote); if (card) card.classList.add('bye');
+    closeModal(); const card = $('#v_' + lote); if (card) card.classList.add('bye');
     setTimeout(refreshTab, 400); confetti(90); coinRain(16); toast('✅ Pagado y archivado: ' + eur(r.neto), 'ok');
-  } catch (e) { if (btn) { btn.disabled = false; btn.textContent = '💸 Pagar ' + eur(c.neto); } toast(e.message, 'bad'); }
+  });
 }
 /* escáner del QR del cliente */
 function scanModal() {
