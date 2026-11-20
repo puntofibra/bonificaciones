@@ -116,6 +116,12 @@ label{display:block;font-size:12px;color:var(--mut);margin:12px 0 6px;letter-spa
 .ic.stk.on::before{content:'★';text-shadow:0 0 10px rgba(251,191,36,.8)}
 .ic.stk.on::after{content:'✓';position:absolute;right:-6px;top:-8px;width:18px;height:18px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:900;color:#052e16;background:#34d399;box-shadow:0 0 0 2px #1b1030;animation:pop .3s cubic-bezier(.2,1.6,.4,1)}
 .sc-star{display:inline-block;margin-right:6px;color:#fbbf24;text-shadow:0 0 10px rgba(251,191,36,.8)}
+/* pago preparado y menú del botón derecho sobre «Pagar» */
+.sc-prep{display:inline-block;padding:1px 8px;border-radius:999px;font-weight:800;color:#052e16;background:#34d399}
+.mnp{position:fixed;z-index:9999;min-width:250px;padding:6px;border-radius:16px;background:rgba(24,16,40,.97);border:1px solid rgba(52,211,153,.55);box-shadow:0 18px 40px rgba(0,0,0,.55),0 0 22px rgba(52,211,153,.25);animation:pop .18s cubic-bezier(.2,1.5,.4,1);transform-origin:top left}
+.mnp button{display:flex;align-items:center;gap:12px;width:100%;padding:11px 12px;border:0;border-radius:11px;background:transparent;color:#fff;font:inherit;text-align:left;cursor:pointer;transition:background .15s}
+.mnp button:hover{background:rgba(52,211,153,.16)}
+.mnp span{font-size:22px}.mnp b{display:block;font-size:14px}.mnp small{display:block;font-size:12px;color:#a7b0c0;margin-top:1px}
 /* importe comprobado (interno): casilla junto al importe, con una V grande que sobresale */
 .sc-r{display:flex;align-items:center;gap:12px;flex:none}
 .ckv{position:relative;width:28px;height:28px;flex:none;padding:0;border-radius:9px;cursor:pointer;background:rgba(255,255,255,.06);border:2px solid rgba(255,255,255,.3);transition:transform .15s,border-color .25s,background .25s,box-shadow .25s}
@@ -968,7 +974,7 @@ function grupoPendiente(l) {
     <div class="sc-top sc-tog" onclick="plegar('${k}')"><div><b>${esEstrella(c) ? '<span class="sc-star" title="Cliente estrella: se le paga del 1 al 5 del mes siguiente">★</span>' : ''}${esc(c.nombre)} <i class="sc-fl">▾</i></b><small class="mut">${l.length} recibo${l.length > 1 ? 's' : ''} pendiente${l.length > 1 ? 's' : ''} · el último pedido ${fdate(l[l.length - 1].creada)}</small></div><div class="sc-r"><button type="button" class="ckv${l.every(s => s.comprobada) ? ' on' : ''}" title="${l.every(s => s.comprobada) ? 'Importe comprobado y correcto (pulsa para quitar la marca)' : 'Marcar el importe como comprobado'}" onclick="event.stopPropagation();comprobar('${c.idCliente}',this)"><i>✓</i></button><div class="sc-imp">${eur(suma(l))}</div></div></div>
     <div class="sc-det">${filasRecibos(l)}
     ${datosCobro(c)}</div>
-    <div class="row" style="margin-top:12px"><button class="btn ghost" onclick="rechazarDe('${c.idCliente}')">❌ Rechazar…</button><button class="btn" onclick="revisarGrupo('${c.idCliente}')">💸 Pagar${l.length > 1 ? ' (' + l.length + ')' : ''}</button></div></div>`;
+    <div class="row" style="margin-top:12px"><button class="btn ghost" onclick="rechazarDe('${c.idCliente}')">❌ Rechazar…</button><button class="btn" title="Botón derecho: preparar el pago" onclick="revisarGrupo('${c.idCliente}')" oncontextmenu="menuPagar(event,'${c.idCliente}')">💸 Pagar${l.length > 1 ? ' (' + l.length + ')' : ''}</button></div></div>`;
 }
 /* despliega / pliega la ficha de un cliente pendiente (se recuerda al refrescar) */
 function plegar(k) {
@@ -982,11 +988,39 @@ function desglose(t, lin, desc, neto, lbl, exc, deu) {
 function grupoVerificado(l) {
   const c = l[0];
   const k = 'v_' + c.lote, ab = A.abiertas && A.abiertas[k];
-  return `<div class="glass scard st-pe${ab ? ' abierta' : ''}" id="${k}">
-    <div class="sc-top sc-tog" onclick="plegar('${k}')"><div><b>${esc(c.nombre)} <i class="sc-fl">▾</i></b><small class="mut">Pendiente de pago${l.length > 1 ? ' · ' + l.length + ' recibos' : ''}</small></div><div class="sc-imp">${eur(c.neto)}</div></div>
-    <div class="sc-det">${filasRecibos(l)}${desglose(suma(l), c.lineas, c.descuento, c.neto, 'Total a pagar', c.excesos)}
+  return `<div class="glass scard st-ok${ab ? ' abierta' : ''}" id="${k}">
+    <div class="sc-top sc-tog" onclick="plegar('${k}')"><div><b>${esEstrella(c) ? '<span class="sc-star" title="Cliente estrella: se le paga del 1 al 5 del mes siguiente">★</span>' : ''}${esc(c.nombre)} <i class="sc-fl">▾</i></b><small class="mut"><span class="sc-prep">✔ Preparado</span>${l.length > 1 ? ' · ' + l.length + ' recibos' : ''}${c.metodo && MET[c.metodo] ? ' · ' + MET[c.metodo] : ''}${c.pagadoPor ? ' · paga ' + esc(c.pagadoPor) : ''}</small></div><div class="sc-imp">${eur(c.neto)}</div></div>
+    <div class="sc-det">${filasRecibos(l)}${desglose(suma(l), c.lineas, c.descuento, c.neto, 'Total a pagar', c.excesos, c.deudaDesc)}
     ${datosCobro(c)}</div>
-    <div class="row" style="margin-top:12px"><button class="btn ghost" onclick="reabrir('${c.id}')">↩ Deshacer</button><button class="btn ok" onclick="pagarVerificado('${c.lote}')">💸 Marcar pagado</button></div></div>`;
+    <div class="row" style="margin-top:12px"><button class="btn ghost" onclick="reabrir('${c.id}')">↩ Deshacer</button><button class="btn ok" onclick="pagarPreparado('${c.lote}',this)">💸 Pagar ${eur(c.neto)}</button></div></div>`;
+}
+/* menú del botón derecho sobre «Pagar»: preparar el pago sin pagarlo todavía */
+function menuPagar(ev, idCliente) {
+  ev.preventDefault(); ev.stopPropagation();
+  const old = document.getElementById('mnp'); if (old) old.remove();
+  const m = document.createElement('div'); m.id = 'mnp'; m.className = 'mnp';
+  m.innerHTML = '<button type="button"><span>🗂️</span><div><b>Preparar el pago</b><small>Lo dejas todo hecho y guardado, sin pagar todavía</small></div></button>';
+  document.body.appendChild(m);
+  const w = m.offsetWidth, h = m.offsetHeight;
+  m.style.left = Math.max(8, Math.min(ev.clientX, innerWidth - w - 8)) + 'px';
+  m.style.top = (ev.clientY + h + 8 > innerHeight ? Math.max(8, ev.clientY - h - 6) : ev.clientY + 6) + 'px';
+  const cerrar = () => { m.remove(); removeEventListener('pointerdown', fuera, true); removeEventListener('keydown', esc_, true); removeEventListener('scroll', cerrar, true); };
+  const fuera = e => { if (!m.contains(e.target)) cerrar(); };
+  const esc_ = e => { if (e.key === 'Escape') cerrar(); };
+  m.querySelector('button').onclick = () => { cerrar(); revisarGrupo(idCliente, null, true); };
+  setTimeout(() => { addEventListener('pointerdown', fuera, true); addEventListener('keydown', esc_, true); addEventListener('scroll', cerrar, true); }, 0);
+}
+/* pago ya preparado: un solo toque y queda pagado y archivado (no vuelve a preguntar nada) */
+async function pagarPreparado(lote, btn) {
+  const l = A.sol.filter(s => s.lote === lote && s.estado === 'verificada'); if (!l.length) return; const c = l[0];
+  if (!c.metodo || !MET[c.metodo]) return pagarVerificado(lote);   // verificaciones antiguas sin método guardado: se pregunta
+  if (btn) { if (btn.disabled) return; btn.disabled = true; btn.textContent = '⏳ Pagando…'; }
+  try {
+    const r = await call('pagarLote', {ids:l.map(s => s.id), fechaPago:today()});
+    r.solicitudes.forEach(upd); if (r.deudas) setDeudas(c.idCliente, r.deudas);
+    const card = $('#v_' + lote); if (card) card.classList.add('bye');
+    setTimeout(refreshTab, 400); confetti(90); coinRain(16); toast('✅ Pagado y archivado: ' + eur(r.neto), 'ok');
+  } catch (e) { if (btn) { btn.disabled = false; btn.textContent = '💸 Pagar ' + eur(c.neto); } toast(e.message, 'bad'); }
 }
 /* escáner del QR del cliente */
 function scanModal() {
@@ -1010,7 +1044,7 @@ function tabPe() {
     <button class="btn ghost big" onclick="scanModal()">📷 Escanear QR de un cliente</button>
     <h3 class="sec">⏳ Pendientes de pago <small class="mut" style="font-weight:500">· agrupados por cliente</small></h3>
     <div class="cards">${gpe.length ? gpe.map(grupoPendiente).join('') : '<div class="glass empty">🎉 No hay nada pendiente</div>'}</div>
-    ${gve.length ? '<div class="cards">' + gve.map(grupoVerificado).join('') + '</div>' : ''}</div>`;
+    ${gve.length ? '<h3 class="sec">🗂️ Pagos preparados <small class="mut" style="font-weight:500">· listos para pagar con un toque</small></h3><div class="cards">' + gve.map(grupoVerificado).join('') + '</div>' : ''}</div>`;
 }
 function upd(s) { const i = A.sol.findIndex(x => x.id === s.id); if (i >= 0) A.sol[i] = Object.assign(A.sol[i], s); navBadges(); }
 function refreshTab() { closeModal(); tab(A.tab); }
@@ -1024,7 +1058,10 @@ function empVal(id, que) {
   if ((A.emps || []).length && !v) throw new Error('Elige qué empleado ' + que);
   if (v) A.lastEmp = v; return v;
 }
-function pagoCampos(c) {
+function pagoCampos(c, prep) {
+  if (prep) return `<label>¿CÓMO SE VA A PAGAR?</label><div class="seg" id="pm">${Object.keys(MET).map((k, i) => `<button class="${i === 0 ? 'on' : ''}" data-m="${k}">${MET[k]}</button>`).join('')}</div>
+    ${empSel('pq', '¿QUIÉN VA A HACER EL PAGO?')}
+    <div class="box" style="font-size:13px" id="pinfo"></div>`;
   return `<label>¿CÓMO SE HA PAGADO?</label><div class="seg" id="pm">${Object.keys(MET).map((k, i) => `<button class="${i === 0 ? 'on' : ''}" data-m="${k}">${MET[k]}</button>`).join('')}</div>
     ${empSel('pq', '¿QUIÉN HA HECHO EL PAGO?')}
     <label>FECHA DEL PAGO</label><input id="pf" type="date" max="${today()}" value="${today()}">
@@ -1038,11 +1075,12 @@ function bindPago(c, getNeto) {
   info(); return { metodo: () => m, info };
 }
 /* Pagar: pendiente → pagada (se archiva) */
-function revisarGrupo(idCliente, soloIds) {
+function revisarGrupo(idCliente, soloIds, prep) {
   const l = A.sol.filter(s => s.estado === 'pendiente' && s.idCliente === idCliente && (!soloIds || soloIds.indexOf(s.id) >= 0)).reverse();
   if (!l.length) return; const c = l[0], dl = A.descLinea || 3;
   const dps = (A.deudas || []).filter(d => d.idCliente === idCliente && d.estado === 'pendiente');
-  modal(`<div class="mh"><div class="ic big st-pe">💸</div><div><h3>Pagar bonificación</h3><small class="mut">${esc(c.nombre)} · ${l.length} recibo${l.length > 1 ? 's' : ''}</small></div></div>
+  modal(`<div class="mh"><div class="ic big st-pe">💸</div><div><h3>${prep ? 'Preparar el pago' : 'Pagar bonificación'}</h3><small class="mut">${esc(c.nombre)} · ${l.length} recibo${l.length > 1 ? 's' : ''}</small></div></div>
+    ${prep ? '<div class="box" style="font-size:13px;border-color:rgba(52,211,153,.45)">🗂️ <b>Todavía no se paga.</b> Deja aquí todo hecho y guardado; el día del pago solo tendrás que pulsar <b>Pagar</b>.</div>' : ''}
     <p class="mut" style="font-size:13px;margin:6px 0 0">Comprueba cada cargo con los movimientos de su cuenta (${maskIban(c.iban)}). Desmarca el que no esté bien.</p>
     ${filasRecibos(l, true)}
     <div class="box"><b>📱 ¿El cliente tiene líneas móviles contratadas?</b>
@@ -1058,8 +1096,8 @@ function revisarGrupo(idCliente, soloIds) {
       <div class="seg" id="qd"><button data-v="no" class="on">No</button><button data-v="si">Sí</button></div>
       <div id="qdn" hidden style="margin-top:8px">${dps.map(d => `<label class="sw" style="margin-top:6px"><input type="checkbox" class="dck" value="${esc(d.id)}" checked> ${esc(d.motivo)} · <b>${eur(pend([d]))}</b>${d.pagado ? ` <small class="mut">(de ${eur(d.importe)})</small>` : ''}</label>`).join('')}</div></div>` : ''}
     <div id="dsg"></div>
-    ${pagoCampos(c)}
-    <div class="row" style="margin-top:16px"><button class="btn ghost" onclick="closeModal()">Cancelar</button><button class="btn ok" id="pok">Marcar pagado</button></div>`);
+    ${pagoCampos(c, prep)}
+    <div class="row" style="margin-top:16px"><button class="btn ghost" onclick="closeModal()">Cancelar</button><button class="btn ok" id="pok">${prep ? 'Guardar' : 'Marcar pagado'}</button></div>`);
   let tiene = false, exc = false, deu = false;
   const dsel = () => deu ? [...document.querySelectorAll('.dck')].filter(x => x.checked).map(x => x.value) : [];
   const sel = () => [...document.querySelectorAll('.rck')].filter(x => x.checked).map(x => x.value);
@@ -1074,7 +1112,7 @@ function revisarGrupo(idCliente, soloIds) {
   const calc = () => {
     const {ids, t, lin, desc, xs, dd, neto} = vals();
     $('#dsg').innerHTML = desglose(t, lin, desc, neto, 'Total a pagar', xs, dd) + (neto < 0 ? '<p style="color:var(--bad);font-size:13px">⚠ Los descuentos superan la suma de los recibos</p>' : '');
-    $('#pok').textContent = !ids.length ? 'Marca algún recibo' : '💸 Marcar pagado (' + eur(Math.max(0, neto)) + ')';
+    $('#pok').textContent = !ids.length ? 'Marca algún recibo' : (prep ? '💾 Guardar (' : '💸 Marcar pagado (') + eur(Math.max(0, neto)) + ')';
     $('#pok').disabled = !ids.length || neto < 0;
     if (P) P.info();
     return {ids, lin, neto};
@@ -1096,7 +1134,11 @@ function revisarGrupo(idCliente, soloIds) {
     if (deu && !dIds.length) throw new Error('Marca qué deuda descuentas, o elige No');
     if (tiene && !(lin > 0)) throw new Error('Indica cuántas líneas tiene');
     if (exc && !(xs > 0)) throw new Error('Escribe el importe de los consumos extra');
-    const emp = empVal('pq', 'ha hecho el pago');
+    const emp = empVal('pq', prep ? 'va a hacer el pago' : 'ha hecho el pago');
+    if (prep) {   // solo se deja preparado: no se paga ni se toca la deuda hasta el día del pago
+      const rp = await call('prepararPago', {ids, lineas:lin, excesos:xs, deudas:dIds, metodo:P.metodo(), empleado:emp});
+      rp.solicitudes.forEach(upd); refreshTab(); toast('🗂️ Pago preparado: ' + eur(rp.neto) + '. El día del pago solo pulsa Pagar', 'ok'); return;
+    }
     const r = await call('pagarLote', {ids, lineas:lin, excesos:xs, deudas:dIds, metodo:P.metodo(), fechaPago:$('#pf').value, empleado:emp});
     r.solicitudes.forEach(upd); if (r.deudas) setDeudas(c.idCliente, r.deudas); refreshTab(); toast('💸 Pago de ' + eur(r.neto) + ' registrado y archivado', 'ok'); coinRain(16); confetti(80);
   });
@@ -1132,7 +1174,7 @@ function rechazar(id) {
 async function reabrir(id) {
   const s = A.sol.find(x => x.id === id);
   const n = s && s.lote ? A.sol.filter(x => x.lote === s.lote).length : 1;
-  const que = 'el pago';
+  const que = s && s.estado === 'verificada' ? 'la preparación del pago' : 'el pago';
   if (!confirm(n > 1 ? 'Esto incluye ' + n + ' recibos. ¿Deshacer ' + que + ' y dejar los ' + n + ' otra vez pendientes?' : '¿Deshacer ' + que + ' y volver a dejar la solicitud pendiente?')) return;
   try { await call('reabrir', {id}); await loadAll(); refreshTab(); toast('Vuelve a estar pendiente', 'ok'); } catch (e) { toast(e.message, 'bad'); }
 }
