@@ -130,6 +130,29 @@ label{display:block;font-size:12px;color:var(--mut);margin:12px 0 6px;letter-spa
 .ckv i{position:absolute;left:1px;bottom:-3px;font-style:normal;font-weight:900;font-size:40px;line-height:1;color:#34d399;text-shadow:0 0 12px rgba(52,211,153,.75),0 2px 0 rgba(0,0,0,.35);transform:scale(0) rotate(-25deg);transform-origin:20% 90%;transition:transform .3s cubic-bezier(.2,1.7,.4,1);pointer-events:none}
 .ckv.on{border-color:#34d399;background:rgba(52,211,153,.14);box-shadow:0 0 14px rgba(52,211,153,.4)}
 .ckv.on i{transform:scale(1) rotate(-6deg)}
+/* aparcado y verificado: V verde junto al importe; con «?» si han entrado recibos nuevos sin verificar */
+.vrf{position:relative;display:inline-grid;place-items:center;width:34px;height:34px;flex:none;font-style:normal;font-weight:900;font-size:30px;line-height:1;color:#34d399;text-shadow:0 0 12px rgba(52,211,153,.8),0 2px 0 rgba(0,0,0,.35);transform:rotate(-6deg);animation:pop .3s cubic-bezier(.2,1.6,.4,1)}
+.vrf b{position:absolute;right:-12px;top:-6px;width:20px;height:20px;border-radius:50%;display:grid;place-items:center;font-size:13px;font-weight:900;color:#3a2400;background:#fbbf24;text-shadow:none;transform:rotate(6deg);box-shadow:0 0 0 2px #1b1030,0 0 12px rgba(251,191,36,.7);animation:vq 1.2s ease-in-out infinite}
+@keyframes vq{50%{transform:rotate(6deg) scale(1.18);box-shadow:0 0 0 2px #1b1030,0 0 20px rgba(251,191,36,1)}}
+.sc-apc{display:inline-block;padding:1px 8px;border-radius:999px;font-weight:800;color:#052e16;background:#34d399}
+.sc-nv{display:inline-block;padding:1px 8px;border-radius:999px;font-weight:800;color:#3a2400;background:#fbbf24;animation:vq2 1.2s ease-in-out infinite}
+@keyframes vq2{50%{box-shadow:0 0 14px rgba(251,191,36,.9)}}
+.sc-imp small{display:block;font-size:12px;font-weight:700;color:#fbbf24;text-align:right}
+.rec.nuevo{border-color:#fbbf24;animation:rise .35s both,parp 1s ease-in-out infinite}
+.rec.nuevo::after{content:'NUEVO';margin-left:6px;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:900;color:#3a2400;background:#fbbf24}
+@keyframes parp{50%{background:rgba(251,191,36,.22);box-shadow:0 0 16px rgba(251,191,36,.55)}}
+/* decisión final: pagar ya o aparcar verificado */
+.dec{position:fixed;inset:0;z-index:10000;display:grid;place-items:center;padding:18px;background:rgba(5,3,12,.72);backdrop-filter:blur(6px);animation:fade .2s}
+.dec>div{width:min(440px,100%);padding:22px 18px 16px;border-radius:24px;background:linear-gradient(160deg,rgba(36,22,58,.98),rgba(18,12,32,.98));border:1px solid rgba(255,255,255,.12);box-shadow:0 30px 70px rgba(0,0,0,.6);text-align:center;animation:up .3s cubic-bezier(.2,1.3,.4,1)}
+.dec h3{margin:6px 0 2px;font-size:20px}
+.dec .dimp{font-size:40px;font-weight:800;margin:4px 0 14px;background:linear-gradient(90deg,#f472b6,#fb923c);-webkit-background-clip:text;background-clip:text;color:transparent}
+.dec .op{display:flex;align-items:center;gap:14px;width:100%;margin-top:10px;padding:14px;border-radius:18px;border:2px solid rgba(255,255,255,.12);background:rgba(255,255,255,.04);color:#fff;font:inherit;text-align:left;cursor:pointer;transition:transform .15s,border-color .2s,background .2s}
+.dec .op:hover{transform:translateY(-2px)}
+.dec .op span{font-size:30px;flex:none}
+.dec .op b{display:block;font-size:16px}.dec .op small{display:block;font-size:12.5px;color:#a7b0c0;margin-top:2px}
+.dec .op.pg{border-color:rgba(52,211,153,.55);background:rgba(52,211,153,.1)}.dec .op.pg:hover{background:rgba(52,211,153,.2)}
+.dec .op.ap{border-color:rgba(96,165,250,.55);background:rgba(96,165,250,.1)}.dec .op.ap:hover{background:rgba(96,165,250,.2)}
+.dec .op:disabled{opacity:.6;pointer-events:none}
 .mv .t b{display:block;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .mv .t small{color:var(--mut)}
 .pts{font-weight:800;font-variant-numeric:tabular-nums;text-align:right}
@@ -936,7 +959,7 @@ async function loadAll() {
   // Una sola llamada trae todo el panel (más rápido y menos expuesto a los fallos de Google)
   try {
     const p = await call('panel');
-    A.clients = p.clients; A.sol = p.solicitudes; A.deudas = p.deudas; A.emps = p.empleados; A.descLinea = p.descLinea;
+    A.clients = p.clients; A.sol = p.solicitudes; A.deudas = p.deudas; A.emps = p.empleados; A.descLinea = p.descLinea; A.aparc = p.aparcados || {};
   } catch (e) { A.clients = A.clients || []; A.sol = A.sol || []; A.deudas = A.deudas || []; toast(e.message, 'bad'); }
 }
 function navBadges() {
@@ -963,8 +986,9 @@ function datosCobro(s) {
   return `<div class="dato sm"><span>📱</span><div><small class="mut">Bizum</small><b class="mono">${esc(s.telefono)}</b></div>${copyBtn(s.telefono, 'Teléfono')}</div>
     <div class="dato sm"><span>🏦</span><div><small class="mut">IBAN</small><b class="mono">${esc(s.iban)}</b></div>${copyBtn(s.iban, 'IBAN')}</div>`;
 }
-function filasRecibos(l, check) {
-  return `<div class="recs">${l.map(s => `<label class="rec">${check ? `<input type="checkbox" class="rck" value="${s.id}" checked>` : (s.comprobada ? '<i title="Importe comprobado">✅</i>' : '<i>🧾</i>')}
+function filasRecibos(l, check, opc) {
+  const no = opc && opc.desmarcados, nv = opc && opc.nuevos;
+  return `<div class="recs">${l.map(s => `<label class="rec${nv && nv.indexOf(s.id) >= 0 ? ' nuevo' : ''}">${check ? `<input type="checkbox" class="rck" value="${s.id}"${no && no.indexOf(s.id) >= 0 ? '' : ' checked'}>` : (s.comprobada ? '<i title="Importe comprobado">✅</i>' : '<i>🧾</i>')}
     <span class="rf">📅 ${fday(s.fechaCargo)}</span><span class="rc">${esc(s.concepto || s.id)}</span><b>${eur(s.importe)}</b></label>`).join('')}</div>`;
 }
 /* ── marcas internas del administrador (el cliente nunca las ve) ── */
@@ -978,22 +1002,30 @@ async function estrella(id, el) {
   catch (e) { c.estrella = !v; if (el) el.classList.toggle('on', !v); toast(e.message, 'bad'); }
   if (el) delete el.dataset.busy;
 }
-// importe comprobado: ya lo he cotejado con los cobros y es correcto
-async function comprobar(idCliente, el) {
-  const l = A.sol.filter(s => s.idCliente === idCliente && s.estado === 'pendiente'); if (!l.length || (el && el.dataset.busy)) return;
-  const v = !l.every(s => s.comprobada), antes = l.map(s => !!s.comprobada);
-  l.forEach(s => (s.comprobada = v));
-  if (el) { el.dataset.busy = '1'; el.classList.toggle('on', v); el.title = v ? 'Importe comprobado y correcto (pulsa para quitar la marca)' : 'Marcar el importe como comprobado'; }
-  try { await call('comprobar', {ids:l.map(s => s.id), ok:v}); }
-  catch (e) { l.forEach((s, i) => (s.comprobada = antes[i])); if (el) el.classList.toggle('on', antes.every(Boolean)); toast(e.message, 'bad'); }
-  if (el) delete el.dataset.busy;
+/* ── Aparcado y verificado (interno): el pago ya revisado, con líneas, consumos y deuda aplicados, sin pagar todavía.
+   Si después entran recibos nuevos del cliente, salen como «sin verificar» (V con interrogante y parpadeando dentro). */
+function infoAparc(idCliente, l) {
+  const a = (A.aparc || {})[idCliente]; if (!a) return null;
+  const ids = l.map(s => s.id), incl = (a.ids || []).filter(i => ids.indexOf(i) >= 0);
+  if (!incl.length) return null;                                  // lo verificado ya no está pendiente
+  const vistos = a.vistos || a.ids || [], nuevos = ids.filter(i => vistos.indexOf(i) < 0);
+  const desmarcados = ids.filter(i => vistos.indexOf(i) >= 0 && incl.indexOf(i) < 0);
+  const dl = A.descLinea || 3, t = suma(l.filter(s => incl.indexOf(s.id) >= 0));
+  const dps = (A.deudas || []).filter(d => d.idCliente === idCliente && d.estado === 'pendiente' && (a.deudas || []).indexOf(d.id) >= 0);
+  const neto = Math.round((t - (a.lineas || 0) * dl - (a.excesos || 0) - pend(dps)) * 100) / 100;
+  return { a, incl, nuevos, desmarcados, neto, t, lin: a.lineas || 0, desc: Math.round((a.lineas || 0) * dl * 100) / 100, xs: a.excesos || 0, dd: pend(dps), sumaNuevos: suma(l.filter(s => nuevos.indexOf(s.id) >= 0)) };
 }
 function grupoPendiente(l) {
   const c = l[0];
   const k = 'g_' + c.idCliente, ab = A.abiertas && A.abiertas[k];
+  const ap = infoAparc(c.idCliente, l), nn = ap ? ap.nuevos.length : 0;
+  const vrf = ap ? `<i class="vrf" title="${nn ? 'Verificado, pero han entrado ' + nn + ' recibo' + (nn > 1 ? 's' : '') + ' nuevo' + (nn > 1 ? 's' : '') + ' sin verificar' : 'Aparcado y verificado: ya lo revisaste'}">✓${nn ? '<b>?</b>' : ''}</i>` : '';
+  const sub = ap ? `<span class="sc-apc">🅿️ Verificado</span>${nn ? ` <span class="sc-nv">+${nn} nuevo${nn > 1 ? 's' : ''} sin verificar</span>` : ''} · ${l.length} recibo${l.length > 1 ? 's' : ''}`
+    : `${l.length} recibo${l.length > 1 ? 's' : ''} pendiente${l.length > 1 ? 's' : ''} · el último pedido ${fdate(l[l.length - 1].creada)}`;
+  const imp = ap ? `${eur(ap.neto)}${nn ? `<small>+ ${eur(ap.sumaNuevos)} nuevo${nn > 1 ? 's' : ''}</small>` : ''}` : eur(suma(l));
   return `<div class="glass scard st-pe${ab ? ' abierta' : ''}" id="${k}">
-    <div class="sc-top sc-tog" onclick="plegar('${k}')"><div><b>${esEstrella(c) ? '<span class="sc-star" title="Cliente estrella: se le paga del 1 al 5 del mes siguiente">★</span>' : ''}${esc(c.nombre)} <i class="sc-fl">▾</i></b><small class="mut">${l.length} recibo${l.length > 1 ? 's' : ''} pendiente${l.length > 1 ? 's' : ''} · el último pedido ${fdate(l[l.length - 1].creada)}</small></div><div class="sc-r"><button type="button" class="ckv${l.every(s => s.comprobada) ? ' on' : ''}" title="${l.every(s => s.comprobada) ? 'Importe comprobado y correcto (pulsa para quitar la marca)' : 'Marcar el importe como comprobado'}" onclick="event.stopPropagation();comprobar('${c.idCliente}',this)"><i>✓</i></button><div class="sc-imp">${eur(suma(l))}</div></div></div>
-    <div class="sc-det">${filasRecibos(l)}
+    <div class="sc-top sc-tog" onclick="plegar('${k}')"><div><b>${esEstrella(c) ? '<span class="sc-star" title="Cliente estrella: se le paga del 1 al 5 del mes siguiente">★</span>' : ''}${esc(c.nombre)} <i class="sc-fl">▾</i></b><small class="mut">${sub}</small></div><div class="sc-r">${vrf}<div class="sc-imp">${imp}</div></div></div>
+    <div class="sc-det">${filasRecibos(l, false, ap ? { nuevos: ap.nuevos } : null)}${ap ? desglose(ap.t, ap.lin, ap.desc, ap.neto, 'Total verificado', ap.xs, ap.dd) : ''}
     ${datosCobro(c)}</div>
     <div class="row" style="margin-top:12px"><button class="btn ghost" onclick="rechazarDe('${c.idCliente}')">❌ Rechazar…</button><button class="btn" title="Botón derecho: preparar el pago" onclick="revisarGrupo('${c.idCliente}')" oncontextmenu="menuPagar(event,'${c.idCliente}')">💸 Pagar${l.length > 1 ? ' (' + l.length + ')' : ''}</button></div></div>`;
 }
@@ -1106,10 +1138,13 @@ function revisarGrupo(idCliente, soloIds, prep) {
   const l = A.sol.filter(s => s.estado === 'pendiente' && s.idCliente === idCliente && (!soloIds || soloIds.indexOf(s.id) >= 0)).reverse();
   if (!l.length) return; const c = l[0], dl = A.descLinea || 3;
   const dps = (A.deudas || []).filter(d => d.idCliente === idCliente && d.estado === 'pendiente');
+  const ap = !prep && !soloIds ? infoAparc(idCliente, l) : null, aa = ap ? ap.a : {};
+  const apDeu = ap ? (aa.deudas || []).filter(i => dps.some(d => d.id === i)) : [];
   modal(`<div class="mh"><div class="ic big st-pe">💸</div><div><h3>${prep ? 'Preparar el pago' : 'Pagar bonificación'}</h3><small class="mut">${esc(c.nombre)} · ${l.length} recibo${l.length > 1 ? 's' : ''}</small></div></div>
     ${prep ? '<div class="box" style="font-size:13px;border-color:rgba(52,211,153,.45)">🗂️ <b>Todavía no se paga.</b> Deja aquí todo hecho y guardado; el día del pago solo tendrás que pulsar <b>Pagar</b>.</div>' : ''}
+    ${ap ? (ap.nuevos.length ? `<div class="box" style="font-size:13px;border-color:#fbbf24">⚠️ <b>Lo verificaste, pero han entrado ${ap.nuevos.length} recibo${ap.nuevos.length > 1 ? 's' : ''} nuevo${ap.nuevos.length > 1 ? 's' : ''}</b> (los que parpadean). Revísalos y vuelve a aparcarlo, o págalo todo ya.</div>` : '<div class="box" style="font-size:13px;border-color:rgba(52,211,153,.45)">🅿️ <b>Ya lo verificaste.</b> Están puestos los cambios que dejaste aparcados.</div>') : ''}
     <p class="mut" style="font-size:13px;margin:6px 0 0">Comprueba cada cargo con los movimientos de su cuenta (${maskIban(c.iban)}). Desmarca el que no esté bien.</p>
-    ${filasRecibos(l, true)}
+    ${filasRecibos(l, true, ap ? { nuevos: ap.nuevos, desmarcados: ap.desmarcados } : null)}
     <div class="box"><b>📱 ¿El cliente tiene líneas móviles contratadas?</b>
       <p class="mut" style="font-size:12px;margin:4px 0 8px">Las líneas no se bonifican: se descuentan ${eur(dl)} por línea.</p>
       <div class="seg" id="ql"><button data-v="no" class="on">No</button><button data-v="si">Sí</button></div>
@@ -1124,7 +1159,7 @@ function revisarGrupo(idCliente, soloIds, prep) {
       <div id="qdn" hidden style="margin-top:8px">${dps.map(d => `<label class="sw" style="margin-top:6px"><input type="checkbox" class="dck" value="${esc(d.id)}" checked> ${esc(d.motivo)} · <b>${eur(pend([d]))}</b>${d.pagado ? ` <small class="mut">(de ${eur(d.importe)})</small>` : ''}</label>`).join('')}</div></div>` : ''}
     <div id="dsg"></div>
     ${pagoCampos(c, prep)}
-    <div class="row" style="margin-top:16px"><button class="btn ghost" onclick="closeModal()">Cancelar</button><button class="btn ok" id="pok">${prep ? 'Guardar' : 'Marcar pagado'}</button></div>`);
+    <div class="row" style="margin-top:16px"><button class="btn ghost" onclick="closeModal()">Cancelar</button><button class="btn ok" id="pok">${prep ? 'Guardar' : 'Marcar pagado o verificar'}</button></div>`);
   let tiene = false, exc = false, deu = false;
   const dsel = () => deu ? [...document.querySelectorAll('.dck')].filter(x => x.checked).map(x => x.value) : [];
   const sel = () => [...document.querySelectorAll('.rck')].filter(x => x.checked).map(x => x.value);
@@ -1139,7 +1174,7 @@ function revisarGrupo(idCliente, soloIds, prep) {
   const calc = () => {
     const {ids, t, lin, desc, xs, dd, neto} = vals();
     $('#dsg').innerHTML = desglose(t, lin, desc, neto, 'Total a pagar', xs, dd) + (neto < 0 ? '<p style="color:var(--bad);font-size:13px">⚠ Los descuentos superan la suma de los recibos</p>' : '');
-    $('#pok').textContent = !ids.length ? 'Marca algún recibo' : (prep ? '💾 Guardar (' : '💸 Marcar pagado (') + eur(Math.max(0, neto)) + ')';
+    $('#pok').textContent = !ids.length ? 'Marca algún recibo' : (prep ? '💾 Guardar (' : '✅ Marcar pagado o verificar (') + eur(Math.max(0, neto)) + ')';
     $('#pok').disabled = !ids.length || neto < 0;
     if (P) P.info();
     return {ids, lin, neto};
@@ -1155,19 +1190,61 @@ function revisarGrupo(idCliente, soloIds, prep) {
   $('#lm').onclick = () => { $('#ln').value = Math.max(1, (parseInt($('#ln').value) || 1) - 1); calc(); };
   $('#lp').onclick = () => { $('#ln').value = (parseInt($('#ln').value) || 0) + 1; calc(); };
   P = bindPago(c, () => vals().neto);
+  // lo que se dejó aparcado vuelve a salir puesto
+  if (ap) {
+    if (aa.lineas > 0) { document.querySelector('#ql [data-v="si"]').click(); $('#ln').value = aa.lineas; }
+    if (aa.excesos > 0) { document.querySelector('#qx [data-v="si"]').click(); $('#xn').value = String(aa.excesos).replace('.', ','); }
+    if (apDeu.length && $('#qd')) { document.querySelector('#qd [data-v="si"]').click(); document.querySelectorAll('.dck').forEach(x => (x.checked = apDeu.indexOf(x.value) >= 0)); }
+  }
   calc();
+  const comprueba = () => {
+    const v = vals();
+    if (deu && !v.dIds.length) throw new Error('Marca qué deuda descuentas, o elige No');
+    if (tiene && !(v.lin > 0)) throw new Error('Indica cuántas líneas tiene');
+    if (exc && !(v.xs > 0)) throw new Error('Escribe el importe de los consumos extra');
+    return v;
+  };
+  const pagarYa = async () => {
+    const {ids, lin, xs, dIds} = comprueba();
+    const emp = empVal('pq', 'ha hecho el pago');
+    const r = await call('pagarLote', {ids, lineas:lin, excesos:xs, deudas:dIds, metodo:P.metodo(), fechaPago:$('#pf').value, empleado:emp});
+    r.solicitudes.forEach(upd); if (r.deudas) setDeudas(c.idCliente, r.deudas);
+    if ((A.aparc || {})[idCliente]) { delete A.aparc[idCliente]; call('desaparcar', {idCliente}).catch(() => {}); }
+    refreshTab(); toast('💸 Pago de ' + eur(r.neto) + ' registrado y archivado', 'ok'); coinRain(16); confetti(80);
+  };
+  const aparcar = async () => {
+    const {ids, lin, xs, dIds, neto} = comprueba();
+    const d = {ids, vistos:l.map(s => s.id), lineas:lin, excesos:xs, deudas:dIds};
+    await call('aparcar', Object.assign({idCliente}, d));
+    A.aparc = A.aparc || {}; A.aparc[idCliente] = d;
+    refreshTab(); toast('🅿️ Aparcado y verificado: ' + eur(neto) + '. Lo pagas cuando quieras', 'ok');
+  };
+  // pregunta final: pagar ya o dejarlo aparcado con los cambios hechos
+  const decidir = () => {
+    const v = comprueba(), nn = ap ? ap.nuevos.length : 0;
+    const o = document.createElement('div'); o.className = 'dec'; o.id = 'dec';
+    o.innerHTML = `<div><div class="ic big st-pe" style="margin:0 auto 6px">🧾</div><h3>¿Qué hacemos con este pago?</h3>
+      <p class="mut" style="margin:0;font-size:13px">${esc(c.nombre)} · ${v.ids.length} recibo${v.ids.length > 1 ? 's' : ''}${v.lin ? ' · ' + v.lin + ' línea' + (v.lin > 1 ? 's' : '') + ' restada' + (v.lin > 1 ? 's' : '') : ''}${v.xs ? ' · consumos restados' : ''}</p>
+      <div class="dimp">${eur(Math.max(0, v.neto))}</div>
+      <button type="button" class="op pg" id="dPg"><span>💸</span><div><b>Pagarlo ya</b><small>Queda pagado y archivado ahora mismo, y el cliente lo verá como pagado.</small></div></button>
+      <button type="button" class="op ap" id="dAp"><span>🅿️</span><div><b>Aparcarlo verificado</b><small>Se guarda revisado con estos cambios. Verás la V y el importe nuevo, y lo pagas cuando toque.</small></div></button>
+      ${nn ? '<p style="font-size:12px;color:#fbbf24;margin:10px 0 0">Al aparcarlo, los recibos nuevos quedan verificados también.</p>' : ''}
+      <button type="button" class="link" id="dNo" style="margin-top:12px">↩ Volver a revisarlo</button></div>`;
+    document.body.appendChild(o);
+    const fin = () => o.remove();
+    o.addEventListener('click', e => { if (e.target === o) fin(); });
+    $('#dNo').onclick = fin;
+    $('#dPg').onclick = e => act(e.currentTarget, async () => { try { await pagarYa(); } finally { fin(); } });
+    $('#dAp').onclick = e => act(e.currentTarget, async () => { try { await aparcar(); } finally { fin(); } });
+  };
   $('#pok').onclick = e => act(e.currentTarget, async () => {
-    const {ids, lin, xs, dIds} = vals();
-    if (deu && !dIds.length) throw new Error('Marca qué deuda descuentas, o elige No');
-    if (tiene && !(lin > 0)) throw new Error('Indica cuántas líneas tiene');
-    if (exc && !(xs > 0)) throw new Error('Escribe el importe de los consumos extra');
-    const emp = empVal('pq', prep ? 'va a hacer el pago' : 'ha hecho el pago');
+    if (!prep) return decidir();
+    const {ids, lin, xs, dIds} = comprueba();
+    const emp = empVal('pq', 'va a hacer el pago');
     if (prep) {   // solo se deja preparado: no se paga ni se toca la deuda hasta el día del pago
       const rp = await call('prepararPago', {ids, lineas:lin, excesos:xs, deudas:dIds, metodo:P.metodo(), empleado:emp});
       rp.solicitudes.forEach(upd); refreshTab(); toast('🗂️ Pago preparado: ' + eur(rp.neto) + '. El día del pago solo pulsa Pagar', 'ok'); return;
     }
-    const r = await call('pagarLote', {ids, lineas:lin, excesos:xs, deudas:dIds, metodo:P.metodo(), fechaPago:$('#pf').value, empleado:emp});
-    r.solicitudes.forEach(upd); if (r.deudas) setDeudas(c.idCliente, r.deudas); refreshTab(); toast('💸 Pago de ' + eur(r.neto) + ' registrado y archivado', 'ok'); coinRain(16); confetti(80);
   });
 }
 /* (compatibilidad) solicitudes antiguas en estado verificada */
