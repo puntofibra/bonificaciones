@@ -1174,8 +1174,10 @@ function tabPe() {
   const pe = A.sol.filter(s => s.estado === 'pendiente').reverse(), ve = A.sol.filter(s => s.estado === 'verificada');
   const gpe = grupos(pe, s => s.idCliente), gve = grupos(ve, s => s.lote || s.id);
   const netoVe = gve.reduce((a, l) => a + (l[0].neto ?? suma(l)), 0);
+  // si está aparcado y verificado, cuenta el importe ya rebajado (líneas, consumos, deuda) más los recibos nuevos sin verificar
+  const totPe = Math.round(gpe.reduce((a, l) => { const ap = infoAparc(l[0].idCliente, l); return a + (ap ? ap.neto + ap.sumaNuevos : suma(l)); }, 0) * 100) / 100;
   $('#tab').innerHTML = `<div class="stack">
-    <div class="stats"><div class="glass stat"><span class="mut">⏳ Pendiente de pago</span><b class="amb">${eur(suma(pe) + netoVe)}</b><small class="mut">${pe.length + ve.length} recibos de ${gpe.length} cliente${gpe.length === 1 ? '' : 's'}</small></div></div>
+    <div class="stats"><div class="glass stat"><span class="mut">⏳ Pendiente de pago</span><b class="amb">${eur(totPe + netoVe)}</b><small class="mut">${pe.length + ve.length} recibos de ${gpe.length} cliente${gpe.length === 1 ? '' : 's'}</small></div></div>
     <button class="btn ghost big" onclick="scanModal()">📷 Escanear QR de un cliente</button>
     <h3 class="sec">⏳ Pendientes de pago <small class="mut" style="font-weight:500">· agrupados por cliente</small></h3>
     <div class="cards">${gpe.length ? gpe.map(grupoPendiente).join('') : '<div class="glass empty">🎉 No hay nada pendiente</div>'}</div>
