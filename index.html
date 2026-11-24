@@ -413,52 +413,70 @@ function bindLongPress(btn) {
   ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => btn.addEventListener(ev, stop));
   btn.addEventListener('contextmenu', e => e.preventDefault());
 }
-function llaveModal() {
-  modal(`<h3>🔑 Entrar con llave NFC</h3><p class="mut">¿Dónde vas a acercar la llave?</p>
+/* La llave la guarda esta app (sin central): la primera que se pasa queda como llave de administrador.
+   En Android se lee aquí mismo; en PC o iPhone sale un QR para pasarla con un móvil Android. */
+function llaveModal(codigoPar) {
+  const nfc = 'NDEFReader' in window;
+  if (!nfc && !codigoPar) return llaveQr();
+  modal(`<h3>🔑 ${codigoPar ? 'Pasa la llave para el otro dispositivo' : 'Entrar con llave NFC'}</h3>
+    <p class="mut" style="font-size:13px">Pulsa el botón y acerca tu llave a la parte de atrás del móvil.</p>
     <div style="display:grid;gap:10px;margin-top:16px">
-      <button class="btn big" id="lvAqui">📱 En este dispositivo</button>
-      <button class="btn ghost big" id="lvQr">🔳 En otro móvil (escanear QR)</button>
+      <button class="btn big" id="lvLeer">📲 Leer llave NFC</button>
+      ${codigoPar ? '' : '<button class="btn ghost" id="lvQr">🔳 Pasarla con otro móvil (QR)</button>'}
       <button class="link" onclick="closeModal()">Cancelar</button></div>
-    <p class="mut" id="lvMsg" style="font-size:13px;margin-top:10px;text-align:center"></p>`);
-  let ses = null, err = null;
-  const pide = call('llaveSesion').then(d => { ses = d; }).catch(e => { err = e; });
-  const listo = async () => { await pide; if (err) throw err; return ses; };
-  $('#lvAqui').onclick = async () => {
-    let w = null;
-    if (ses) w = window.open(ses.url, '_blank');           // abrir ya, conservando el toque
-    else w = window.open('about:blank', '_blank');
-    try { const s = await listo(); if (w && !ses_abierta(w, s)) {} llaveEsperar(s, 'aqui'); }
-    catch (e) { if (w) w.close(); const m = $('#lvMsg'); if (m) m.textContent = e.message; }
-  };
-  $('#lvQr').onclick = async e => {
-    try { llaveEsperar(await listo(), 'qr'); }
-    catch (er) { const m = $('#lvMsg'); if (m) m.textContent = er.message; }
+    <p class="mut" id="lvSt" style="font-size:13px;margin-top:10px;text-align:center"></p>`);
+  if (!nfc) { $('#lvLeer').remove(); $('#lvSt').textContent = 'Este móvil no puede leer la llave. Hace falta un Android con Chrome.'; return; }
+  const q = $('#lvQr'); if (q) q.onclick = llaveQr;
+  $('#lvLeer').onclick = async () => {
+    const st = $('#lvSt'), b = $('#lvLeer'), ctl = new AbortController();
+    let lector;
+    try { lector = new NDEFReader(); await lector.scan({ signal: ctl.signal }); }
+    catch (e) { st.textContent = e.name === 'NotAllowedError' ? 'Permite el uso de NFC para leer la llave' : 'No se ha podido activar el lector NFC. ¿Tienes el NFC encendido?'; return; }
+    b.disabled = true; b.textContent = '📶 Acerca la llave…'; st.textContent = '';
+    let ocupado = false;
+    const vigila = setInterval(() => { if (!$('#lvLeer')) { ctl.abort(); clearInterval(vigila); } }, 500);
+    lector.onreadingerror = () => { if (!ocupado) st.textContent = 'No se ha podido leer la llave, acércala otra vez'; };
+    lector.onreading = async ev => {
+      if (ocupado) return;
+      const sn = String(ev.serialNumber || '');
+      if (!sn) { st.textContent = 'Esta llave no tiene un número legible'; return; }
+      ocupado = true; if (navigator.vibrate) navigator.vibrate(80); st.textContent = '⏳ Comprobando llave…';
+      try {
+        const r = await call(codigoPar ? 'llaveParLeer' : 'llaveNfc', { codigo: codigoPar || '', llave: sn });
+        ctl.abort(); clearInterval(vigila);
+        if (codigoPar) {
+          modal(`<h3>✅ Llave ${r.nueva ? 'guardada' : 'correcta'}</h3><p class="mut">Ya puedes mirar el otro dispositivo: entrará solo.</p><button class="btn big" style="width:100%" onclick="closeModal()">Cerrar</button>`);
+          return;
+        }
+        llaveEntra(r);
+      } catch (e) { ocupado = false; const s2 = $('#lvSt'); if (s2) s2.textContent = '❌ ' + e.message; }
+    };
   };
 }
-function ses_abierta(w, s) { try { if (w.location.href === 'about:blank') w.location.href = s.url; } catch (e) {} return true; }
-function llaveEsperar(s, modo) {
-  const pie = '<p id="lvSt" class="mut" style="text-align:center;margin:14px 0 6px">⏳ Esperando la llave…</p><button class="btn ghost" style="width:100%" onclick="closeModal()">Cancelar</button>';
-  if (modo === 'qr') {
-    modal(`<h3>Escanea con el móvil de la llave</h3>
-      <div style="text-align:center;margin:12px 0"><div id="lvqr" style="background:#fff;padding:12px;border-radius:14px;display:inline-block"></div></div>
-      <p class="mut" style="font-size:13px">Abre el enlace en un Android con NFC, acerca tu llave por detrás del móvil y esta pantalla entrará sola.</p>` + pie);
-    new QRCode($('#lvqr'), { text: s.url, width: 220, height: 220, correctLevel: QRCode.CorrectLevel.M });
-  } else {
-    modal(`<h3>Acerca tu llave</h3>
-      <p class="mut" style="font-size:13px">Se ha abierto el lector NFC en otra pestaña. Acerca la llave por detrás del móvil; cuando suene, vuelve aquí y entrarás solo.</p>
-      <a class="btn big" style="display:block;text-decoration:none;text-align:center;margin-top:12px" href="${s.url}" target="_blank" rel="noopener">Abrir el lector NFC</a>` + pie);
-  }
+async function llaveEntra(r) {
+  S.token = r.token; localStorage.setItem('bf_t', r.token);
+  closeModal(); toast(r.nueva ? '🔑 Llave guardada: desde ahora se pedirá siempre esta' : '🔑 Hola, administrador', 'ok');
+  await boot();
+}
+async function llaveQr() {
+  modal(`<h3>Escanea con el móvil de la llave</h3>
+    <div style="text-align:center;margin:12px 0"><div id="lvqr" style="background:#fff;padding:12px;border-radius:14px;display:inline-block;min-width:220px;min-height:220px"></div></div>
+    <p class="mut" style="font-size:13px">Abre el enlace en un Android con NFC, acerca tu llave por detrás del móvil y esta pantalla entrará sola.</p>
+    <p id="lvSt" class="mut" style="text-align:center;margin:14px 0 6px">⏳ Preparando el código…</p>
+    <button class="btn ghost" style="width:100%" onclick="closeModal()">Cancelar</button>`);
+  let s;
+  try { s = await call('llavePar'); } catch (e) { const st = $('#lvSt'); if (st) st.textContent = '❌ ' + e.message; return; }
+  if (!$('#lvqr')) return;
+  new QRCode($('#lvqr'), { text: location.origin + location.pathname + '?llave=' + s.codigo, width: 220, height: 220, correctLevel: QRCode.CorrectLevel.M });
+  $('#lvSt').textContent = '⏳ Esperando la llave…';
   const tick = async () => {
-    if (!$('#lvSt')) return; // modal cerrado: dejamos de preguntar
+    if (!$('#lvSt') || !$('#lvqr')) return;          // modal cerrado: dejamos de preguntar
     try {
       const r = await call('llaveEstado', { codigo: s.codigo });
-      const st = $('#lvSt'); if (!st) return;
-      if (r.estado === 'ok') {
-        S.token = r.token; localStorage.setItem('bf_t', r.token);
-        closeModal(); toast('🔑 Hola' + (r.nombre ? ', ' + r.nombre : ''), 'ok'); await boot(); return;
-      }
-      if (r.estado === 'denegado') { st.innerHTML = '❌ ' + esc(r.motivo || 'Llave no autorizada') + '<br><button class="link" onclick="llaveModal()">Probar otra vez</button>'; return; }
-      if (r.estado === 'caducado') { st.innerHTML = '⌛ El código ha caducado.<br><button class="link" onclick="llaveModal()">Generar otro</button>'; return; }
+      const st = $('#lvSt'); if (!st || !$('#lvqr')) return;
+      if (r.estado === 'ok') return llaveEntra(r);
+      if (r.estado === 'denegado') { st.innerHTML = '❌ ' + esc(r.motivo || 'Llave no autorizada') + '<br><button class="link" onclick="llaveQr()">Probar otra vez</button>'; return; }
+      if (r.estado === 'caducado') { st.innerHTML = '⌛ El código ha caducado.<br><button class="link" onclick="llaveQr()">Generar otro</button>'; return; }
     } catch (e) {}
     setTimeout(tick, 1500);
   };
@@ -577,6 +595,9 @@ async function boot() {
       }
     }
   }
+  // Este móvil ha escaneado el QR de otro dispositivo: solo tiene que leer la llave
+  const par = (location.search.match(/[?&]llave=([0-9a-f]{24})/) || [])[1];
+  if (par) { history.replaceState(null, '', location.pathname); setTimeout(() => llaveModal(par), 400); }
   if (!S.token) return authView('login');
   $('#app').innerHTML = '<div style="min-height:100dvh;display:grid;place-items:center;padding:20px"><div class="glass authbox" style="text-align:center"><span class="spin"></span><p class="mut" style="margin-top:12px">Conectando con el servidor…<br><small>Si hay mucha demanda puede tardar unos segundos</small></p></div></div>';
   try { const d = await call('me'); S.role = d.role; d.role === 'admin' ? adminView(d) : clientView(d); }
