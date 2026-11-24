@@ -1019,7 +1019,7 @@ function grupoPendiente(l) {
   const c = l[0];
   const k = 'g_' + c.idCliente, ab = A.abiertas && A.abiertas[k];
   const ap = infoAparc(c.idCliente, l), nn = ap ? ap.nuevos.length : 0;
-  const vrf = ap ? `<i class="vrf" title="${nn ? 'Verificado, pero han entrado ' + nn + ' recibo' + (nn > 1 ? 's' : '') + ' nuevo' + (nn > 1 ? 's' : '') + ' sin verificar' : 'Aparcado y verificado: ya lo revisaste'}">✓${nn ? '<b>?</b>' : ''}</i>` : '';
+  const vrf = ap ? `<i class="vrf" oncontextmenu="menuVrf(event,'${c.idCliente}')" title="${nn ? 'Verificado, pero han entrado ' + nn + ' recibo' + (nn > 1 ? 's' : '') + ' nuevo' + (nn > 1 ? 's' : '') + ' sin verificar' : 'Aparcado y verificado: ya lo revisaste'}">✓${nn ? '<b>?</b>' : ''}</i>` : '';
   const sub = ap ? `<span class="sc-apc">🅿️ Verificado</span>${nn ? ` <span class="sc-nv">+${nn} nuevo${nn > 1 ? 's' : ''} sin verificar</span>` : ''} · ${l.length} recibo${l.length > 1 ? 's' : ''}`
     : `${l.length} recibo${l.length > 1 ? 's' : ''} pendiente${l.length > 1 ? 's' : ''} · el último pedido ${fdate(l[l.length - 1].creada)}`;
   const imp = ap ? `${eur(ap.neto)}${nn ? `<small>+ ${eur(ap.sumaNuevos)} nuevo${nn > 1 ? 's' : ''}</small>` : ''}` : eur(suma(l));
@@ -1061,6 +1061,28 @@ function menuPagar(ev, idCliente) {
   const fuera = e => { if (!m.contains(e.target)) cerrar(); };
   const esc_ = e => { if (e.key === 'Escape') cerrar(); };
   m.querySelector('button').onclick = () => { cerrar(); revisarGrupo(idCliente, null, true); };
+  setTimeout(() => { addEventListener('pointerdown', fuera, true); addEventListener('keydown', esc_, true); addEventListener('scroll', cerrar, true); }, 0);
+}
+/* botón derecho sobre la V de verificado: quitar la verificación (vuelve a quedar como pendiente sin revisar) */
+function menuVrf(ev, idCliente) {
+  ev.preventDefault(); ev.stopPropagation();
+  const old = document.getElementById('mnp'); if (old) old.remove();
+  const m = document.createElement('div'); m.id = 'mnp'; m.className = 'mnp'; m.style.borderColor = 'rgba(248,113,113,.6)';
+  m.innerHTML = '<button type="button"><span>✖️</span><div><b>Cancelar la verificación</b><small>Quita la V y los cambios aparcados; vuelve a quedar sin revisar</small></div></button>';
+  document.body.appendChild(m);
+  const w = m.offsetWidth, h = m.offsetHeight;
+  m.style.left = Math.max(8, Math.min(ev.clientX - w + 20, innerWidth - w - 8)) + 'px';
+  m.style.top = (ev.clientY + h + 8 > innerHeight ? Math.max(8, ev.clientY - h - 6) : ev.clientY + 6) + 'px';
+  const cerrar = () => { m.remove(); removeEventListener('pointerdown', fuera, true); removeEventListener('keydown', esc_, true); removeEventListener('scroll', cerrar, true); };
+  const fuera = e => { if (!m.contains(e.target)) cerrar(); };
+  const esc_ = e => { if (e.key === 'Escape') cerrar(); };
+  m.querySelector('button').onclick = async () => {
+    cerrar();
+    const antes = (A.aparc || {})[idCliente]; if (!antes) return;
+    delete A.aparc[idCliente]; refreshTab();
+    try { await call('desaparcar', {idCliente}); toast('Verificación cancelada', 'ok'); }
+    catch (e) { A.aparc[idCliente] = antes; refreshTab(); toast(e.message, 'bad'); }
+  };
   setTimeout(() => { addEventListener('pointerdown', fuera, true); addEventListener('keydown', esc_, true); addEventListener('scroll', cerrar, true); }, 0);
 }
 /* pago ya preparado: no vuelve a preguntar los datos, solo pide confirmar antes de dejarlo pagado y archivado */
