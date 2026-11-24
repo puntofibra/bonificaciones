@@ -153,6 +153,16 @@ label{display:block;font-size:12px;color:var(--mut);margin:12px 0 6px;letter-spa
 .dec .op.pg{border-color:rgba(52,211,153,.55);background:rgba(52,211,153,.1)}.dec .op.pg:hover{background:rgba(52,211,153,.2)}
 .dec .op.ap{border-color:rgba(96,165,250,.55);background:rgba(96,165,250,.1)}.dec .op.ap:hover{background:rgba(96,165,250,.2)}
 .dec .op:disabled{opacity:.6;pointer-events:none}
+/* comportamiento sospechoso: cartel rojo para revisar bien */
+.sc-sos{display:inline-block;padding:1px 8px;border-radius:999px;font-weight:800;color:#fff;background:#ef4444;box-shadow:0 0 12px rgba(239,68,68,.6);animation:sos 1.4s ease-in-out infinite}
+@keyframes sos{50%{box-shadow:0 0 20px rgba(239,68,68,1)}}
+.rec.sosp{border-color:#ef4444;background:rgba(239,68,68,.12)}
+.rec.sosp::before{content:'⚠️';margin-right:-4px}
+.sosbox{border-color:#ef4444!important;background:rgba(239,68,68,.1)!important;font-size:13px}
+.sosbox ul{margin:6px 0 0;padding-left:18px}.sosbox li{margin:3px 0}
+.dec .sos-ic{background:rgba(239,68,68,.18);border-color:#ef4444;color:#fff;box-shadow:0 0 22px rgba(239,68,68,.55)}
+.dec ul.sosl{margin:12px 0 4px;padding:12px 14px 12px 30px;text-align:left;font-size:13.5px;border-radius:14px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.45)}
+.dec ul.sosl li{margin:5px 0}
 .mv .t b{display:block;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .mv .t small{color:var(--mut)}
 .pts{font-weight:800;font-variant-numeric:tabular-nums;text-align:right}
@@ -987,8 +997,8 @@ function datosCobro(s) {
     <div class="dato sm"><span>🏦</span><div><small class="mut">IBAN</small><b class="mono">${esc(s.iban)}</b></div>${copyBtn(s.iban, 'IBAN')}</div>`;
 }
 function filasRecibos(l, check, opc) {
-  const no = opc && opc.desmarcados, nv = opc && opc.nuevos;
-  return `<div class="recs">${l.map(s => `<label class="rec${nv && nv.indexOf(s.id) >= 0 ? ' nuevo' : ''}">${check ? `<input type="checkbox" class="rck" value="${s.id}"${no && no.indexOf(s.id) >= 0 ? '' : ' checked'}>` : (s.comprobada ? '<i title="Importe comprobado">✅</i>' : '<i>🧾</i>')}
+  const no = opc && opc.desmarcados, nv = opc && opc.nuevos, so = opc && opc.sosp;
+  return `<div class="recs">${l.map(s => `<label class="rec${nv && nv.indexOf(s.id) >= 0 ? ' nuevo' : ''}${so && so.indexOf(s.id) >= 0 ? ' sosp' : ''}">${check ? `<input type="checkbox" class="rck" value="${s.id}"${no && no.indexOf(s.id) >= 0 ? '' : ' checked'}>` : (s.comprobada ? '<i title="Importe comprobado">✅</i>' : '<i>🧾</i>')}
     <span class="rf">📅 ${fday(s.fechaCargo)}</span><span class="rc">${esc(s.concepto || s.id)}</span><b>${eur(s.importe)}</b></label>`).join('')}</div>`;
 }
 /* ── marcas internas del administrador (el cliente nunca las ve) ── */
@@ -1015,17 +1025,61 @@ function infoAparc(idCliente, l) {
   const neto = Math.round((t - (a.lineas || 0) * dl - (a.excesos || 0) - pend(dps)) * 100) / 100;
   return { a, incl, nuevos, desmarcados, neto, t, lin: a.lineas || 0, desc: Math.round((a.lineas || 0) * dl * 100) / 100, xs: a.excesos || 0, dd: pend(dps), sumaNuevos: suma(l.filter(s => nuevos.indexOf(s.id) >= 0)) };
 }
+/* ── Detector de comportamiento sospechoso de un cliente (solo lo ve el admin) ──
+   Mira todos sus recibos (pendientes y ya pagados) y avisa para revisar bien antes de pagar. */
+function sospechas(idCliente) {
+  const todas = A.sol.filter(s => s.idCliente === idCliente && s.estado !== 'rechazada' && s.estado !== 'cancelada' && s.fechaCargo);
+  const vivas = todas.filter(s => s.estado === 'pendiente' || s.estado === 'verificada');
+  const out = [], ids = new Set();
+  if (!vivas.length) return { motivos: out, ids: [] };
+  const loc = d => { const x = new Date(d); return isNaN(x) ? String(d).slice(0, 10) : x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0'); };
+  const dia = s => loc(s.fechaCargo), mes = s => dia(s).slice(0, 7);
+  const nomMes = m => new Date(m + '-15T12:00:00').toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+  const fd = d => new Date(d + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+  const marca = l => l.forEach(s => { if (s.estado === 'pendiente' || s.estado === 'verificada') ids.add(s.id); });
+  const meses = [...new Set(vivas.map(mes))];
+  meses.forEach(m => {
+    const delMes = todas.filter(s => mes(s) === m), dias = [...new Set(delMes.map(dia))].sort();
+    // mismo importe en días distintos del mismo mes
+    const porImp = {};
+    delMes.forEach(s => { const k = Number(s.importe).toFixed(2); (porImp[k] = porImp[k] || []).push(s); });
+    let yaImp = false;
+    Object.keys(porImp).forEach(k => {
+      const g = porImp[k], dd = [...new Set(g.map(dia))].sort();
+      if (dd.length >= 2) { yaImp = true; marca(g); out.push(`Mismo importe (<b>${eur(+k)}</b>) cobrado en <b>${dd.length} días distintos</b> de ${nomMes(m)}: ${dd.map(fd).join(', ')}.`); }
+      // pide otra vez un recibo igual a uno que ya se le pagó
+      const pag = g.filter(s => s.estado === 'pagada'), pen = g.filter(s => s.estado !== 'pagada');
+      if (pag.length && pen.length && dd.length < 2) { marca(pen); out.push(`Ya se le pagó un recibo de <b>${eur(+k)}</b> el mismo día (${fd(dia(pag[0]))}) y vuelve a pedir otro igual.`); }
+    });
+    // varios cargos en días distintos del mismo mes
+    if (!yaImp && dias.length >= 2) { marca(delMes); out.push(`<b>${delMes.length} cargos en ${dias.length} días distintos</b> de ${nomMes(m)} (${dias.map(fd).join(', ')}). Lo normal es un cargo al mes.`); }
+    if (delMes.length >= 5) out.push(`Muchos recibos en un solo mes: <b>${delMes.length}</b> en ${nomMes(m)}.`);
+  });
+  // importe muy por encima de lo habitual
+  const pagados = todas.filter(s => s.estado === 'pagada');
+  if (pagados.length >= 2) {
+    const media = suma(pagados) / pagados.length;
+    const altos = vivas.filter(s => s.importe > media * 2 && s.importe - media > 15);
+    if (altos.length) { marca(altos); out.push(`Importe muy alto para este cliente: ${altos.map(s => '<b>' + eur(s.importe) + '</b>').join(', ')} (lo normal en él son unos ${eur(media)}).`); }
+  }
+  // fechas raras
+  const hoy = loc(Date.now()), viejo = loc(Date.now() - 120 * 864e5);
+  const fut = vivas.filter(s => dia(s) > hoy); if (fut.length) { marca(fut); out.push(`Fecha de cargo en el futuro: ${fut.map(s => fd(dia(s))).join(', ')}.`); }
+  const ant = vivas.filter(s => dia(s) < viejo); if (ant.length) { marca(ant); out.push(`Recibos muy antiguos (más de 4 meses): ${ant.map(s => fd(dia(s))).join(', ')}.`); }
+  return { motivos: out, ids: [...ids] };
+}
 function grupoPendiente(l) {
   const c = l[0];
   const k = 'g_' + c.idCliente, ab = A.abiertas && A.abiertas[k];
   const ap = infoAparc(c.idCliente, l), nn = ap ? ap.nuevos.length : 0;
   const vrf = ap ? `<i class="vrf" oncontextmenu="menuVrf(event,'${c.idCliente}')" title="${nn ? 'Verificado, pero han entrado ' + nn + ' recibo' + (nn > 1 ? 's' : '') + ' nuevo' + (nn > 1 ? 's' : '') + ' sin verificar' : 'Aparcado y verificado: ya lo revisaste'}">✓${nn ? '<b>?</b>' : ''}</i>` : '';
-  const sub = ap ? `<span class="sc-apc">🅿️ Verificado</span>${nn ? ` <span class="sc-nv">+${nn} nuevo${nn > 1 ? 's' : ''} sin verificar</span>` : ''} · ${l.length} recibo${l.length > 1 ? 's' : ''}`
-    : `${l.length} recibo${l.length > 1 ? 's' : ''} pendiente${l.length > 1 ? 's' : ''} · el último pedido ${fdate(l[l.length - 1].creada)}`;
+  const so = sospechas(c.idCliente), sosTag = so.motivos.length ? '<span class="sc-sos" title="Comportamiento sospechoso: revísalo bien antes de pagar">⚠️ Revisar</span> ' : '';
+  const sub = sosTag + (ap ? `<span class="sc-apc">🅿️ Verificado</span>${nn ? ` <span class="sc-nv">+${nn} nuevo${nn > 1 ? 's' : ''} sin verificar</span>` : ''} · ${l.length} recibo${l.length > 1 ? 's' : ''}`
+    : `${l.length} recibo${l.length > 1 ? 's' : ''} pendiente${l.length > 1 ? 's' : ''} · el último pedido ${fdate(l[l.length - 1].creada)}`);
   const imp = ap ? `${eur(ap.neto)}${nn ? `<small>+ ${eur(ap.sumaNuevos)} nuevo${nn > 1 ? 's' : ''}</small>` : ''}` : eur(suma(l));
   return `<div class="glass scard st-pe${ab ? ' abierta' : ''}" id="${k}">
     <div class="sc-top sc-tog" onclick="plegar('${k}')"><div><b>${esEstrella(c) ? '<span class="sc-star" title="Cliente estrella: se le paga del 1 al 5 del mes siguiente">★</span>' : ''}${esc(c.nombre)} <i class="sc-fl">▾</i></b><small class="mut">${sub}</small></div><div class="sc-r">${vrf}<div class="sc-imp">${imp}</div></div></div>
-    <div class="sc-det">${filasRecibos(l, false, ap ? { nuevos: ap.nuevos } : null)}${ap ? desglose(ap.t, ap.lin, ap.desc, ap.neto, 'Total verificado', ap.xs, ap.dd) : ''}
+    <div class="sc-det">${so.motivos.length ? `<div class="box sosbox"><b>⚠️ Revisa bien este cliente</b><ul>${so.motivos.map(x => '<li>' + x + '</li>').join('')}</ul></div>` : ''}${filasRecibos(l, false, { nuevos: ap ? ap.nuevos : [], sosp: so.ids })}${ap ? desglose(ap.t, ap.lin, ap.desc, ap.neto, 'Total verificado', ap.xs, ap.dd) : ''}
     ${datosCobro(c)}</div>
     <div class="row" style="margin-top:12px"><button class="btn ghost" onclick="rechazarDe('${c.idCliente}')">❌ Rechazar…</button><button class="btn" title="Botón derecho: preparar el pago" onclick="revisarGrupo('${c.idCliente}')" oncontextmenu="menuPagar(event,'${c.idCliente}')">💸 Pagar${l.length > 1 ? ' (' + l.length + ')' : ''}</button></div></div>`;
 }
@@ -1162,11 +1216,13 @@ function revisarGrupo(idCliente, soloIds, prep) {
   const dps = (A.deudas || []).filter(d => d.idCliente === idCliente && d.estado === 'pendiente');
   const ap = !prep && !soloIds ? infoAparc(idCliente, l) : null, aa = ap ? ap.a : {};
   const apDeu = ap ? (aa.deudas || []).filter(i => dps.some(d => d.id === i)) : [];
+  const so = sospechas(idCliente);
   modal(`<div class="mh"><div class="ic big st-pe">💸</div><div><h3>${prep ? 'Preparar el pago' : 'Pagar bonificación'}</h3><small class="mut">${esc(c.nombre)} · ${l.length} recibo${l.length > 1 ? 's' : ''}</small></div></div>
     ${prep ? '<div class="box" style="font-size:13px;border-color:rgba(52,211,153,.45)">🗂️ <b>Todavía no se paga.</b> Deja aquí todo hecho y guardado; el día del pago solo tendrás que pulsar <b>Pagar</b>.</div>' : ''}
     ${ap ? (ap.nuevos.length ? `<div class="box" style="font-size:13px;border-color:#fbbf24">⚠️ <b>Lo verificaste, pero han entrado ${ap.nuevos.length} recibo${ap.nuevos.length > 1 ? 's' : ''} nuevo${ap.nuevos.length > 1 ? 's' : ''}</b> (los que parpadean). Revísalos y vuelve a aparcarlo, o págalo todo ya.</div>` : '<div class="box" style="font-size:13px;border-color:rgba(52,211,153,.45)">🅿️ <b>Ya lo verificaste.</b> Están puestos los cambios que dejaste aparcados.</div>') : ''}
     <p class="mut" style="font-size:13px;margin:6px 0 0">Comprueba cada cargo con los movimientos de su cuenta (${maskIban(c.iban)}). Desmarca el que no esté bien.</p>
-    ${filasRecibos(l, true, ap ? { nuevos: ap.nuevos, desmarcados: ap.desmarcados } : null)}
+    ${so.motivos.length ? `<div class="box sosbox"><b>⚠️ Comportamiento sospechoso: revísalo bien</b><ul>${so.motivos.map(x => '<li>' + x + '</li>').join('')}</ul></div>` : ''}
+    ${filasRecibos(l, true, { nuevos: ap ? ap.nuevos : [], desmarcados: ap ? ap.desmarcados : [], sosp: so.ids })}
     <div class="box"><b>📱 ¿El cliente tiene líneas móviles contratadas?</b>
       <p class="mut" style="font-size:12px;margin:4px 0 8px">Las líneas no se bonifican: se descuentan ${eur(dl)} por línea.</p>
       <div class="seg" id="ql"><button data-v="no" class="on">No</button><button data-v="si">Sí</button></div>
@@ -1212,6 +1268,18 @@ function revisarGrupo(idCliente, soloIds, prep) {
   $('#lm').onclick = () => { $('#ln').value = Math.max(1, (parseInt($('#ln').value) || 1) - 1); calc(); };
   $('#lp').onclick = () => { $('#ln').value = (parseInt($('#ln').value) || 0) + 1; calc(); };
   P = bindPago(c, () => vals().neto);
+  // cartel de aviso al abrir el pago si hay algo raro
+  if (so.motivos.length) {
+    const o = document.createElement('div'); o.className = 'dec';
+    o.innerHTML = `<div><div class="ic big sos-ic" style="margin:0 auto 6px">⚠️</div><h3>Revisa bien este cliente</h3>
+      <p class="mut" style="margin:0;font-size:13px">${esc(c.nombre)} tiene un comportamiento que no es el habitual</p>
+      <ul class="sosl">${so.motivos.map(x => '<li>' + x + '</li>').join('')}</ul>
+      <p class="mut" style="font-size:12px;margin:6px 0 0">Comprueba cada cargo con los movimientos de su cuenta antes de pagar. Los recibos marcados con ⚠️ son los que debes mirar.</p>
+      <button type="button" class="btn big" id="sosOk" style="width:100%;margin-top:14px">🔍 Entendido, lo reviso</button></div>`;
+    document.body.appendChild(o);
+    $('#sosOk').onclick = () => o.remove();
+    if (navigator.vibrate) try { navigator.vibrate([60, 60, 60]); } catch (e) {}
+  }
   // lo que se dejó aparcado vuelve a salir puesto
   if (ap) {
     if (aa.lineas > 0) { document.querySelector('#ql [data-v="si"]').click(); $('#ln').value = aa.lineas; }
