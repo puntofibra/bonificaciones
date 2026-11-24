@@ -1256,7 +1256,19 @@ function revisarGrupo(idCliente, soloIds, prep) {
     const fin = () => o.remove();
     o.addEventListener('click', e => { if (e.target === o) fin(); });
     $('#dNo').onclick = fin;
-    $('#dPg').onclick = e => act(e.currentTarget, async () => { try { await pagarYa(); } finally { fin(); } });
+    // confirmación antes de pagar, por si querías aparcarlo
+    $('#dPg').onclick = () => {
+      try { empVal('pq', 'ha hecho el pago'); } catch (er) { toast(er.message, 'bad'); fin(); return; }
+      o.firstElementChild.innerHTML = `<div class="ic big st-ok" style="margin:0 auto 6px">💸</div><h3>¿Seguro que lo pagas ya?</h3>
+        <p class="mut" style="margin:0;font-size:13px">${esc(c.nombre)} · quedará pagado y archivado, y el cliente lo verá como pagado</p>
+        <div class="dimp" style="background:none;-webkit-text-fill-color:#34d399;color:#34d399">${eur(Math.max(0, v.neto))}</div>
+        <button type="button" class="op pg" id="dSi"><span>✅</span><div><b>Sí, pagarlo ya</b><small>Lo dejo pagado ahora mismo.</small></div></button>
+        <button type="button" class="op ap" id="dAp2"><span>🅿️</span><div><b>No, mejor aparcarlo</b><small>Lo guardo verificado y lo pago más tarde.</small></div></button>
+        <button type="button" class="link" id="dNo2" style="margin-top:12px">↩ Volver a revisarlo</button>`;
+      $('#dNo2').onclick = fin;
+      $('#dSi').onclick = e => act(e.currentTarget, async () => { try { await pagarYa(); } finally { fin(); } });
+      $('#dAp2').onclick = e => act(e.currentTarget, async () => { try { await aparcar(); } finally { fin(); } });
+    };
     $('#dAp').onclick = e => act(e.currentTarget, async () => { try { await aparcar(); } finally { fin(); } });
   };
   $('#pok').onclick = e => act(e.currentTarget, async () => {
